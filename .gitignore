@@ -1,0 +1,14 @@
+# Dependencies & builds
+node_modules/
+dist/
+
+# Go binaries
+api/api
+api/migrate
+api/tmp/
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
+*.log
