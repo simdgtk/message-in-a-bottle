@@ -1,7 +1,9 @@
 package handlers
 
 import (
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"log"
 	"net/http"
 	"chat-gobelin-api/internal/users"
@@ -58,9 +60,14 @@ func (h userHandler) Login(writer http.ResponseWriter, request *http.Request) {
 	}
 
 	user, err := h.userRepo.GetByUserName(request.Context(), req.Username)
+	if errors.Is(err, sql.ErrNoRows) {
+		log.Printf("Unknown user: %s", req.Username)
+		writer.WriteHeader(http.StatusNotFound)
+		return
+	}
 	if err != nil {
 		log.Printf("User retrieval issue: %s", err)
-		writer.WriteHeader(http.StatusUnauthorized)
+		writer.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 

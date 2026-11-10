@@ -1,17 +1,25 @@
 // Composables
 import { createRouter, createWebHistory } from "vue-router";
 
+const SKIP_AUTH = true;
+
 const routes = [
   {
     path: "/",
-    component: () => import("@/views/Transfer.vue"),
+    ...(SKIP_AUTH
+      ? { redirect: "/island" }
+      : { component: () => import("@/views/Transfer.vue") }),
+  },
+  {
+    path: "/island",
+    component: () => import("@/views/Island.vue"),
   },
   {
     path: "/login",
     name: "login",
     component: () =>
       import(/* webpackChunkName: "login" */ "@/views/Login.vue"),
-  }
+  },
 ];
 
 export const router = createRouter({
@@ -19,12 +27,12 @@ export const router = createRouter({
   routes,
 });
 
-router.beforeEach((to, from, next) => {
-  if (to.name !== "login" && localStorage.getItem("thunes_token") === null) {
-    next({ name: "login" });
-  } else {
-    next();
-  }
+router.beforeEach((to) => {
+  if (SKIP_AUTH) return;
+  const isLoggedIn = localStorage.getItem("user_token") !== null;
+
+  if (!isLoggedIn && to.name !== "login" && to.name !== "letter") return { name: "login" };
+  if (isLoggedIn && to.name === "login") return { path: "/" };
 });
 
 export default router;

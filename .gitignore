@@ -1,6 +1,7 @@
 # Dependencies & builds
 node_modules/
 dist/
+graphify-out/
 
 # Go binaries
 api/api

@@ -1,6 +1,0 @@
-{
-  "version": "0.0.1",
-  "configurations": [
-    { "name": "web", "runtimeExecutable": "yarn", "runtimeArgs": ["--cwd", "web", "dev"], "port": 8080 }
-  ]
-}

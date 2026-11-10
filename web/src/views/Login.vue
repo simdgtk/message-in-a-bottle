@@ -1,126 +1,94 @@
 <template>
-  <section class="bg-gray-50 dark:bg-gray-900">
-    <div
-      class="flex flex-col items-center justify-center px-6 py-8 mx-auto md:h-screen lg:py-0"
-    >
-      <div
-        class="w-full bg-white rounded-lg shadow dark:border md:mt-0 sm:max-w-md dark:bg-gray-800 dark:border-gray-700 p-12"
-      >
-        <div class="p-6 space-y-4 md:space-y-6 sm:p-8">
-          <h1
-            class="text-xl font-bold leading-tight tracking-tight text-gray-900 md:text-2xl dark:text-white"
-          >
-            Sign in to your account
-          </h1>
-          <form class="space-y-4 md:space-y-6" action="#" @submit.prevent="onSubmit">
-            <div>
-              <label
-                for="username"
-                class="block mb-2 text-sm font-medium text-gray-900 dark:text-white"
-                >Your username</label
-              >
-              <input
-                type="text"
-                name="username"
-                id="username"
-                v-model="username"
-                class="bg-gray-50 border border-gray-300 text-gray-900 rounded-lg focus:ring-primary-600 focus:border-primary-600 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500"
-                placeholder="Your username"
-                required=""
-              />
-            </div>
-            <div>
-              <label
-                for="password"
-                class="block mb-2 text-sm font-medium text-gray-900 dark:text-white"
-                >Password</label
-              >
-              <input
-                type="password"
-                name="password"
-                id="password"
-                v-model="password"
-                placeholder="••••••••"
-                class="bg-gray-50 border border-gray-300 text-gray-900 rounded-lg focus:ring-primary-600 focus:border-primary-600 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500"
-                required=""
-              />
-            </div>
-            <div class="flex items-center justify-between">
-              <div class="flex items-start">
-                <div class="flex items-center h-5">
-                  <input
-                    id="remember"
-                    aria-describedby="remember"
-                    type="checkbox"
-                    class="w-4 h-4 border border-gray-300 rounded bg-gray-50 focus:ring-3 focus:ring-primary-300 dark:bg-gray-700 dark:border-gray-600 dark:focus:ring-primary-600 dark:ring-offset-gray-800"
-                  />
-                </div>
-                <div class="ml-3 text-sm">
-                  <label for="remember" class="text-gray-500 dark:text-gray-300"
-                    >Remember me</label
-                  >
-                </div>
-              </div>
-              <a
-                href="#"
-                class="text-sm font-medium text-primary-600 hover:underline dark:text-primary-500"
-                >Forgot password?</a
-              >
-            </div>
-            <p v-if="error" class="text-sm text-red-600 dark:text-red-400">{{ error }}</p>
-            <button
-              type="submit"
-              :disabled="loading"
-              class="w-full text-white bg-primary-600 hover:bg-primary-700 focus:ring-4 focus:outline-none focus:ring-primary-300 font-medium rounded-lg text-sm px-5 py-2.5 text-center dark:bg-primary-600 dark:hover:bg-primary-700 dark:focus:ring-primary-800"
-            >
-              Sign in
-            </button>
-            <p class="text-sm font-light text-gray-500 dark:text-gray-400">
-              Don’t have an account yet?
-              <a
-                href="#"
-                class="font-medium text-primary-600 hover:underline dark:text-primary-500"
-                >Sign up</a
-              >
-            </p>
-          </form>
+  <Scene />
+  <section class="login">
+    <div class="login__modal">
+      <h1>Sign in or create an account</h1>
+      <form class="login__form" action="#" @submit.prevent="onSubmit">
+        <div class="login__field">
+          <label for="username">Your username</label>
+          <input
+            type="text"
+            name="username"
+            id="username"
+            v-model="username"
+            @input="needsSignup = false"
+            placeholder="Your username"
+            required=""
+          />
         </div>
-      </div>
+        <div class="login__field">
+          <label for="password">Password</label>
+          <input
+            type="password"
+            name="password"
+            id="password"
+            v-model="password"
+            placeholder="••••••••"
+            required=""
+          />
+        </div>
+        <div class="login__row">
+          <div class="login__remember">
+            <input id="remember" aria-describedby="remember" type="checkbox" />
+            <label for="remember">Remember me</label>
+          </div>
+          <a href="#">Forgot password?</a>
+        </div>
+        <p v-if="error">{{ error }}</p>
+        <template v-if="needsSignup">
+          <p>No account named “{{ username }}”. Create it with this password?</p>
+          <button type="button" :disabled="loading" @click="onSignup">
+            Sign up
+          </button>
+        </template>
+        <button v-else type="submit" :disabled="loading">Continue</button>
+      </form>
     </div>
   </section>
 </template>
 
 <script>
 import axios from "axios";
+import Scene from "@/components/Scene.vue";
 import { router } from "@/router/index";
 
+const API_URL = "http://localhost:4000";
+
 export default {
+  components: { Scene },
   data() {
     return {
       username: "",
       password: "",
       loading: false,
       error: "",
+      needsSignup: false,
     };
   },
   methods: {
-    onSubmit() {
-      this.loading = true;
-      this.error = "";
-
-      axios
-        .post("http://localhost:4000/login", {
+    login() {
+      return axios
+        .post(`${API_URL}/login`, {
           username: this.username,
           password: this.password,
         })
         .then((response) => {
-          localStorage.setItem("thunes_token", response.data);
+          localStorage.setItem("user_token", response.data);
           router.push("/");
-        })
+        });
+    },
+
+    onSubmit() {
+      this.loading = true;
+      this.error = "";
+
+      this.login()
         .catch((error) => {
           const status = error.response?.status;
-          if (status === 401) {
-            this.error = "Invalid Credentials";
+          if (status === 404) {
+            this.needsSignup = true;
+          } else if (status === 401) {
+            this.error = "Wrong password";
           } else {
             this.error = "Internal Server Error";
           }
@@ -129,6 +97,66 @@ export default {
           this.loading = false;
         });
     },
+
+    onSignup() {
+      this.loading = true;
+      this.error = "";
+
+      axios
+        .post(`${API_URL}/user`, {
+          username: this.username,
+          password: this.password,
+        })
+        .then(() => this.login())
+        .catch(() => {
+          this.error = "Could not create the account";
+        })
+        .finally(() => {
+          this.loading = false;
+        });
+    },
   },
 };
 </script>
+
+<style lang="scss" scoped>
+.login {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 2rem 1.5rem;
+
+  &__modal {
+    width: 100%;
+    max-width: 28rem;
+    padding: 3rem;
+  }
+
+  &__form {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    margin-top: 1.5rem;
+  }
+
+  &__field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  &__row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  &__remember {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+}
+</style>
