@@ -222,6 +222,13 @@ export class Debug {
         max: 0.5,
         step: 0.005,
       });
+    if (mat.uFoamOpacity)
+      folderFoam.addBinding(mat.uFoamOpacity, "value", {
+        label: "Opacité",
+        min: 0,
+        max: 1,
+        step: 0.01,
+      });
     if (mat.uFoamColor)
       folderFoam.addBinding(mat.uFoamColor, "value", {
         label: "Couleur",
