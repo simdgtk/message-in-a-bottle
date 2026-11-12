@@ -26,9 +26,8 @@ export class OceanFloor {
     });
   }
 
-  init({ deepColorDark, deepColor, foamColor, speed, scale, voronoiScale }) {
-    const geometry = new THREE.PlaneGeometry(this.size, this.size);
-    // Tangents give a stable tangent space for the foam parallax.
+  init() {
+    const geometry = new THREE.PlaneGeometry(this.size, this.size, 100, 100);
     geometry.computeTangents();
     this.material = new OceanMaterial();
 

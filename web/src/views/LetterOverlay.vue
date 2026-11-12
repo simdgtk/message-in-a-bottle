@@ -1,36 +1,55 @@
 <template>
-  <div class="letter-overlay">
-    <textarea
-      id="text"
-      ref="inputRef"
-      v-model="text"
-      :disabled="!isFontReady"
-      class="letter-input"
-      @input="onTextInput"
-    ></textarea>
+  <div ref="overlayRef" class="letter-overlay">
 
     <div
       class="letter-zone"
-      :class="{ 'is-drawing-mode': drawingMode }"
+      :class="`is-tool-${tool}`"
       @pointerdown="onPointerDown"
       @pointermove="onPointerMove"
       @pointerup="onPointerUp"
       @pointercancel="onPointerUp"
     ></div>
 
-    <div class="commands" @pointerdown.stop>
-      <button id="back-island" @click="backToIsland">retour à l'île</button>
+    <button
+      type="button"
+      class="back-island"
+      @pointerdown.stop
+      @click="backToIsland"
+    >
+      retour à l'île
+    </button>
 
-      <button id="erase" :class="{ active: erasingMode }" @click="toggleErasing">
-        {{ erasingMode ? "crayon" : "gommer" }}
-      </button>
-      <button id="clear" @click="clear">clear</button>
-      <button id="back" @click="back">retour</button>
-
-      <button id="drawing-mode" :class="{ active: drawingMode }" @click="toggleDrawing">
-        {{ drawingMode ? "texte" : "dessiner" }}
+    <div class="toolbar" @pointerdown.stop>
+      <button
+        v-for="item in TOOLBAR"
+        :key="item.tool"
+        type="button"
+        class="tool"
+        :class="{ 'is-active': tool === item.tool }"
+        :aria-label="item.label"
+        :aria-pressed="tool === item.tool"
+        @click="selectTool(item.tool)"
+      >
+        <img
+          v-for="state in 3"
+          :key="state"
+          :class="`tool__state tool__state--${state}`"
+          :src="`/images/toolbar/${item.icon}${state}.webp`"
+          alt=""
+          draggable="false"
+        />
       </button>
     </div>
+
+    <input
+      ref="imageInputRef"
+      type="file"
+      id="image"
+      name="image"
+      accept="image/*"
+      hidden
+      @change="onImageChange"
+    />
   </div>
 </template>
 
@@ -43,24 +62,50 @@ const props = defineProps({
 
 const emit = defineEmits(["back"]);
 
-const inputRef = ref(null);
+const overlayRef = ref(null);
+const imageInputRef = ref(null);
 const isFontReady = ref(false);
-const text = ref(props.letter?.text ?? "");
-const drawingMode = ref(props.letter?.drawingMode ?? false);
-const erasingMode = ref(props.letter?.erasingMode ?? false);
+const tool = ref(props.letter?.tool ?? "text");
 
-function focusInput() {
-  if (drawingMode.value || !isFontReady.value) return;
-  inputRef.value?.focus({ preventScroll: true });
+const TOOLBAR = [
+  { tool: "text", icon: "feather", label: "Écrire" },
+  { tool: "draw", icon: "brush", label: "Dessiner" },
+  { tool: "erase", icon: "eraser", label: "Gommer" },
+  { tool: "photo", icon: "photo", label: "Ajouter une image" },
+];
+
+function selectTool(next) {
+  if (next === "photo") {
+    imageInputRef.value?.click();
+    return;
+  }
+  props.letter?.setTool(next);
 }
 
-function onTextInput() {
+function onImageChange(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    props.letter?.prepareImage(e.target.result);
+  };
+  reader.readAsDataURL(file);
+  e.target.value = "";
+}
+
+function focusInput() {
   if (!isFontReady.value) return;
-  props.letter?.setText(text.value);
+  props.letter?.focusInput();
 }
 
 function onPointerDown(e) {
-  if (!drawingMode.value) {
+  if (props.letter?.imageAddingMode) {
+    props.letter.handlePointerDown(e);
+    focusInput();
+    return;
+  }
+  if (tool.value === "text") {
     e.preventDefault();
     focusInput();
     return;
@@ -74,32 +119,25 @@ function onPointerUp(e) {
   props.letter?.handlePointerUp(e);
 }
 
-function toggleDrawing() {
-  drawingMode.value = props.letter?.toggleDrawingMode() ?? false;
-  focusInput();
-}
-function toggleErasing() {
-  erasingMode.value = props.letter?.toggleErasingMode() ?? false;
-}
-function back() {
-  props.letter?.back();
-}
-function clear() {
-  text.value = "";
-  props.letter?.clear();
-  focusInput();
-}
 function backToIsland() {
   emit("back");
 }
 
-function onWindowKeyDown() {
+function onWindowKeyDown(e) {
+  if (e.key === "Escape" && props.letter?.imageAddingMode) {
+    props.letter.cancelImage();
+    return;
+  }
   if (!isFontReady.value) return;
-  if (document.activeElement !== inputRef.value) focusInput();
+  if (e.target?.closest?.(".tp-dfwv, .tp-rotv")) return;
+  focusInput();
 }
 
 onMounted(async () => {
-  if (props.letter) props.letter.inputRef = inputRef;
+  if (props.letter) {
+    props.letter.textContainer = overlayRef.value;
+    props.letter.onToolChange = (next) => (tool.value = next);
+  }
   window.addEventListener("keydown", onWindowKeyDown);
 
   if (document.fonts?.ready) {
@@ -112,6 +150,11 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   window.removeEventListener("keydown", onWindowKeyDown);
+  if (props.letter) {
+    props.letter.onToolChange = null;
+    props.letter.removeTextarea();
+    props.letter.textContainer = null;
+  }
 });
 </script>
 
@@ -127,22 +170,84 @@ onBeforeUnmount(() => {
     touch-action: none;
     cursor: text;
 
-    &.is-drawing-mode {
+    &.is-tool-draw,
+    &.is-tool-erase,
+    &.is-tool-photo {
       cursor: crosshair;
     }
   }
 
-  .commands {
+  .back-island {
+    position: absolute;
+    z-index: 1;
+    top: 30px;
+    left: 30px;
+  }
+
+  .toolbar {
     position: absolute;
     z-index: 1;
     left: 30px;
     top: 50%;
     transform: translateY(-50%);
+    width: 96px;
+    aspect-ratio: 367 / 1582;
     display: flex;
     flex-direction: column;
-    gap: 16px;
-    background: #fff;
-    padding: 16px;
+    justify-content: space-evenly;
+    align-items: center;
+    background: url("/images/toolbar/bar.webp") center / 100% 100% no-repeat;
+  }
+
+  .tool {
+    all: unset;
+    position: relative;
+    width: 80px;
+    height: 80px;
+    cursor: pointer;
+  }
+
+  .tool__state {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) scale(0.32);
+    max-width: none;
+    pointer-events: none;
+    user-select: none;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+  }
+
+  .tool__state--1 {
+    opacity: 1;
+  }
+
+  .tool:hover:not(.is-active) {
+    .tool__state--1 {
+      opacity: 0;
+    }
+    .tool__state--2 {
+      opacity: 1;
+    }
+  }
+
+  .tool.is-active {
+    .tool__state--1 {
+      opacity: 0;
+    }
+    .tool__state--3 {
+      opacity: 1;
+    }
+  }
+
+  .history {
+    position: absolute;
+    z-index: 1;
+    left: 30px;
+    bottom: 30px;
+    display: flex;
+    gap: 8px;
   }
 
   .letter-input {

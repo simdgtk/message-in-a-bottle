@@ -48,8 +48,6 @@ body {
   font-family: var(--font-primary);
 }
 
-// Inspector three.js (compteur FPS) : en haut au centre au lieu d'en haut à droite.
-// Préfixé par body : la feuille de l'Inspector est injectée après la nôtre.
 body {
   .profiler-toggle,
   .profiler-toggle.toggle-left {
@@ -71,5 +69,23 @@ body {
     &.visible {
       transform: translate(-50%, 0) scale(1);
     }
+  }
+}
+
+.model-label {
+  color: #fff;
+  font-size: 32px;
+  pointer-events: none;
+  opacity: 0;
+  translate: 0 6px;
+  font-weight: 700;
+  text-transform: uppercase;
+  transition:
+    opacity 0.25s ease,
+    translate 0.25s ease;
+
+  &.is-visible {
+    opacity: 1;
+    translate: 0 0;
   }
 }

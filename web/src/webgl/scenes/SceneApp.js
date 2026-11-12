@@ -1,20 +1,43 @@
 import * as THREE from "three/webgpu";
-import { color, fog, rangeFogFactor, uniform } from "three/tsl";
+import {
+  color,
+  fog,
+  rangeFogFactor,
+  uniform,
+  mix,
+  normalWorld,
+  time,
+  sin,
+  positionLocal,
+  positionWorldDirection,
+} from "three/tsl";
 import gsap from "gsap";
+import { CSS2DRenderer } from "three/addons/renderers/CSS2DRenderer.js";
 import { WebGLApp } from "@/webgl/core/WebGLApp.js";
 import { AssetLoader } from "@/webgl/core/AssetLoader.js";
 import { OceanFloor } from "@/webgl/objects/OceanFloor.js";
 import { Model } from "@/webgl/objects/Model.js";
-import { applyPaintedShadow } from "@/webgl/materials/paintedShadow.js";
+import { applyBaseShadow } from "@/webgl/materials/BaseShadow.js";
 import { Letter } from "@/utils/Letter.js";
 import { Debug } from "@/webgl/debug/Debug.js";
+import { createOutlinePipeline } from "@/webgl/postprocessing/OutlinePass.js";
+import { SkyMaterial } from "../materials/Sky";
 
-const HORIZON = 0xbfe3ff;
-const ZENITH = 0x2f7fd6;
+const HORIZON = 0xa3cbe4;
+const ZENITH = 0x2377ca;
 const DEFAULT_CAMERA_POS = new THREE.Vector3(96, 45, 30);
-const LETTER_VIEW_MARGIN = 1.12;
-const CAMERA_TWEEN = { duration: 1.2, ease: "power2.inOut" };
 const DEFAULT_CAMERA_TARGET = new THREE.Vector3(0, 15, 0);
+const ISLAND_SCALE = 120;
+const LETTER_CAMERA_POS = new THREE.Vector3(-1.5, 21, -46.5);
+const LETTER_CAMERA_ROTATION = new THREE.Vector3(0, 180, 0);
+const LETTER_POS = new THREE.Vector3(-1.5, 20.9, -38.5);
+const LETTER_SCALE = 0.084;
+const DARK_BACKGROUND_POS = new THREE.Vector3(-1.5, 20.9, -37.5);
+const DARK_BACKGROUND_OPACITY = 0.8;
+// Bouteille qui flotte à droite de l'île, côté caméra
+const BOTTLE_POS = new THREE.Vector3(42, 0, -21);
+const BOTTLE_SCALE = 4; // largeur en unités monde (Model met à l'échelle sur x/z), ~12 de haut
+const BOTTLE_BOB = { amplitude: 0.6, speed: 1.2 }; // flottement vertical en sin()
 
 export class SceneApp extends WebGLApp {
   constructor(options) {
@@ -23,6 +46,8 @@ export class SceneApp extends WebGLApp {
     this.assetLoader = new AssetLoader();
     this.ocean = null;
     this.letter = null;
+    this.island = null;
+    this.bottle = null;
     this.hemiLight = null;
     this.sun = null;
     this.pipeline = null;
@@ -33,8 +58,27 @@ export class SceneApp extends WebGLApp {
     this.letterWriting = new Letter();
     this.letterMesh = null;
     this.isWriting = false;
-    this.isCameraAnimating = false;
-    this.onLetterClick = null;
+    this.onBarrelClick = null;
+    this.onBottleClick = null;
+    this.darkBackgroundPlane = null;
+
+    // Tweakable from the debug pane
+    this.params = {
+      cameraPosition: DEFAULT_CAMERA_POS.clone(),
+      cameraTarget: DEFAULT_CAMERA_TARGET.clone(),
+      barrelCameraPosition: LETTER_CAMERA_POS.clone(),
+      barrelCameraRotation: LETTER_CAMERA_ROTATION.clone(),
+      letterPosition: LETTER_POS.clone(),
+      letterScale: LETTER_SCALE,
+      overlayPosition: DARK_BACKGROUND_POS.clone(),
+      overlayOpacity: DARK_BACKGROUND_OPACITY,
+      outlineStrength: 3,
+    };
+
+    this.labelRenderer = null;
+    this.hoverables = [];
+    this.hovered = null;
+    this.pointerClient = null;
 
     this.letterWriting.pointerMapper = (x, y) => this.getLetterUV(x, y);
   }
@@ -44,9 +88,29 @@ export class SceneApp extends WebGLApp {
       modelUrl: "/models/letter.glb",
       scale: 60,
       customTexture: this.letterWriting.texture,
+      alignBottom: false,
     });
-    const letterGroup = await this.letter.load(this.assetLoader);
+    this.island = new Model({
+      modelUrl: "/models/island_full.glb",
+      scale: ISLAND_SCALE,
+      alignBottom: false,
+      hover: { label: "Écrire une lettre", lift: 0 },
+    });
+    this.bottle = new Model({
+      modelUrl: "/models/bottle.glb",
+      scale: BOTTLE_SCALE,
+      hover: { label: "Ouvrir la bouteille" },
+    });
+    const [letterGroup, islandGroup, bottleGroup] = await Promise.all([
+      this.letter.load(this.assetLoader),
+      this.island.load(this.assetLoader),
+      this.bottle.load(this.assetLoader),
+    ]);
+    letterGroup.visible = false;
     this.scene.add(letterGroup);
+    this.scene.add(islandGroup);
+    bottleGroup.position.copy(BOTTLE_POS);
+    this.scene.add(bottleGroup);
 
     letterGroup.traverse((child) => {
       if (!child.isMesh) return;
@@ -90,36 +154,21 @@ export class SceneApp extends WebGLApp {
     return hit?.uv ?? null;
   }
 
-  getLetterViewPose() {
-    const mesh = this.letterMesh;
-    mesh.updateWorldMatrix(true, false);
+  applyLetterCamera() {
+    const { barrelCameraPosition: p, barrelCameraRotation: r } = this.params;
+    this.camera.position.copy(p);
+    this.camera.rotation.set(
+      THREE.MathUtils.degToRad(r.x),
+      THREE.MathUtils.degToRad(r.y),
+      THREE.MathUtils.degToRad(r.z),
+      "YXZ",
+    );
+  }
 
-    const geometry = mesh.geometry;
-    if (!geometry.boundingBox) geometry.computeBoundingBox();
-    const localBox = geometry.boundingBox;
-    const localSize = localBox.getSize(new THREE.Vector3());
-    const scale = mesh.getWorldScale(new THREE.Vector3());
-    const width = localSize.x * scale.x;
-    const height = localSize.y * scale.y;
-
-    const center = localBox
-      .getCenter(new THREE.Vector3())
-      .applyMatrix4(mesh.matrixWorld);
-    const normal = new THREE.Vector3(0, 0, 1)
-      .transformDirection(mesh.matrixWorld)
-      .normalize();
-
-    const tanHalfFov = Math.tan(THREE.MathUtils.degToRad(this.camera.fov) / 2);
-    const distance =
-      Math.max(
-        height / 2 / tanHalfFov,
-        width / 2 / (tanHalfFov * this.camera.aspect),
-      ) * LETTER_VIEW_MARGIN;
-
-    return {
-      position: center.clone().addScaledVector(normal, distance),
-      target: center,
-    };
+  applyLetterLayout() {
+    this.letter.group.position.copy(this.params.letterPosition);
+    this.letter.group.scale.setScalar(this.params.letterScale);
+    this.darkBackgroundPlane.position.copy(this.params.overlayPosition);
   }
 
   onClick = (event) => {
@@ -127,30 +176,71 @@ export class SceneApp extends WebGLApp {
     if (event.target?.closest?.(".tp-dfwv, .tp-rotv")) return;
 
     if (this.isWriting || !this.raycaster) return;
-    this.setPointer(event.clientX, event.clientY);
-    const allColliders = [...this.letter.colliders];
-    const intersects = this.raycaster.intersectObjects(allColliders, false);
-    const hitLetter = intersects.find((i) =>
-      this.letter.colliders.includes(i.object),
-    );
-    if (hitLetter) {
-      this.onLetterClick?.();
-    }
-    if (intersects.length > 0) {
-      console.log(intersects[0].object);
+    this.pointerClient = { x: event.clientX, y: event.clientY };
+    this.updateHover();
+    if (this.hovered === this.island) {
+      this.onBarrelClick?.();
+    } else if (this.hovered === this.bottle) {
+      this.onBottleClick?.();
     }
   };
 
+  onPointerMove = (event) => {
+    this.pointerClient = { x: event.clientX, y: event.clientY };
+  };
+
+  onPointerLeave = () => {
+    this.pointerClient = null;
+  };
+
+  updateHover() {
+    let model = null;
+    if (this.pointerClient && !this.isWriting && this.raycaster) {
+      this.setPointer(this.pointerClient.x, this.pointerClient.y);
+      const targets = this.hoverables.flatMap((m) => m.hitTargets);
+      const hit = this.raycaster.intersectObjects(targets, false)[0];
+      model = hit?.object.userData.model ?? null;
+    }
+    this.setHovered(model);
+  }
+
+  update({ elapsed, delta }) {
+    this.updateHover();
+
+    // Flottement de la bouteille. Sur le group : lift reste libre pour l'animation de survol
+    if (this.bottle?.group) {
+      const { amplitude, speed } = BOTTLE_BOB;
+      this.bottle.group.position.y =
+        BOTTLE_POS.y + Math.sin(elapsed * speed) * amplitude;
+    }
+    // Ne redessine le canvas de la lettre que quand elle est affichée (inLetterMode)
+    this.letterWriting?.update(delta * 1000);
+
+    if (this.isWriting) {
+      this.letter.group.quaternion.copy(this.camera.quaternion);
+      this.darkBackgroundPlane.quaternion.copy(this.camera.quaternion);
+    }
+  }
+
   start() {
-    // Background and fog share one color so the far ocean melts into the sky.
     this.uFogColor = uniform(color(HORIZON));
     this.uFogNear = uniform(80);
     this.uFogFar = uniform(320);
-    this.scene.backgroundNode = this.uFogColor;
+
+    // const materialSky = new THREE.MeshBasicNodeMaterial();
+    // materialSky.colorNode = mix(color(HORIZON), color(ZENITH), 0.4);
+    // this.scene.backgroundNode = mix(
+    //   this.uFogColor,
+    //   color(ZENITH),
+    //   positionWorldDirection.y.clamp(0, 1).smoothstep(0, 0.2),
+    // );
+    this.sky = new SkyMaterial();
+    this.scene.backgroundNode = this.sky.colorNode;
     this.scene.fogNode = fog(
       this.uFogColor,
       rangeFogFactor(this.uFogNear, this.uFogFar),
     );
+  
 
     this.camera.fov = 55;
     this.camera.near = 0.1;
@@ -159,15 +249,29 @@ export class SceneApp extends WebGLApp {
     this.raycaster = new THREE.Raycaster();
     this.mouse = new THREE.Vector2(1, 1);
 
-    this.camera.position.copy(DEFAULT_CAMERA_POS);
+    this.camera.position.copy(this.params.cameraPosition);
     if (this.controls) {
-      this.controls.target.copy(DEFAULT_CAMERA_TARGET);
+      this.controls.target.copy(this.params.cameraTarget);
       this.controls.update();
     } else {
-      this.camera.lookAt(DEFAULT_CAMERA_TARGET);
+      this.camera.lookAt(this.params.cameraTarget);
     }
 
     this.setupEventListeners();
+
+    const darkBackgroundMaterial = new THREE.MeshBasicNodeMaterial({
+      color: 0x000000,
+      transparent: true,
+      opacity: 0,
+      depthWrite: false,
+    });
+    darkBackgroundMaterial.fog = false;
+    this.darkBackgroundPlane = new THREE.Mesh(
+      new THREE.PlaneGeometry(5000, 5000),
+      darkBackgroundMaterial,
+    );
+    this.darkBackgroundPlane.visible = false;
+    this.scene.add(this.darkBackgroundPlane);
 
     this.ocean = new OceanFloor({ size: 600 });
     this.scene.add(this.ocean.mesh);
@@ -192,9 +296,24 @@ export class SceneApp extends WebGLApp {
     this.sun.shadow.normalBias = 0.02;
     this.sun.shadow.radius = 4;
     this.scene.add(this.sun);
-    applyPaintedShadow(this.scene, this.sun);
+    applyBaseShadow(this.scene, this.sun);
 
-    this.letter.group.rotation.y = Math.PI / 2;
+    this.hoverables = [this.island, this.bottle].filter((m) => m?.hover);
+
+    this.labelRenderer = new CSS2DRenderer();
+    this.labelRenderer.setSize(this.viewport.width, this.viewport.height);
+    Object.assign(this.labelRenderer.domElement.style, {
+      position: "absolute",
+      inset: "0",
+      pointerEvents: "none",
+    });
+    this.container.appendChild(this.labelRenderer.domElement);
+
+    this.pipeline = createOutlinePipeline(
+      this.renderer,
+      this.scene,
+      this.camera,
+    );
 
     const urlSearchParams = new URLSearchParams(window.location.search);
     const isDebug =
@@ -205,90 +324,117 @@ export class SceneApp extends WebGLApp {
     if (isDebug) {
       this.debug = new Debug({ scene: this });
     }
+  }
 
-    // this.pipeline = createPaintedPipeline(
-    //   this.renderer,
-    //   this.scene,
-    //   this.camera,
-    // );
+  setHovered(model) {
+    if (model === this.hovered) return;
+    this.hovered?.setHovered(false);
+    model?.setHovered(true);
+    this.hovered = model;
+    this.renderer.domElement.style.cursor = model ? "pointer" : "";
+
+    if (!this.pipeline) return;
+    if (model) this.pipeline.setSelection(model.outlineMeshes);
+    gsap.to(this.pipeline.params.strength, {
+      value: model ? this.params.outlineStrength : 0,
+      duration: 0.25,
+      ease: "power2.out",
+      overwrite: true,
+      onComplete: () => {
+        if (!this.hovered) this.pipeline?.setSelection([]);
+      },
+    });
   }
 
   render() {
     if (this.pipeline) this.pipeline.render();
     else super.render();
+    this.labelRenderer?.render(this.scene, this.camera);
   }
 
-  animateCamera(position, target, onComplete) {
-    this.isCameraAnimating = true;
-    gsap.killTweensOf(this.camera.position);
-    if (this.controls) gsap.killTweensOf(this.controls.target);
-
-    const lookTarget = this.controls
-      ? this.controls.target
-      : (this.lookTarget ??= DEFAULT_CAMERA_TARGET.clone());
-
-    gsap.to(this.camera.position, {
-      ...position,
-      ...CAMERA_TWEEN,
-      onUpdate: () => this.camera.lookAt(lookTarget),
-      onComplete: () => {
-        this.isCameraAnimating = false;
-        onComplete?.();
-      },
-    });
-    gsap.to(lookTarget, { ...target, ...CAMERA_TWEEN });
+  setCameraPose(position, target) {
+    this.camera.position.copy(position);
+    if (this.controls) this.controls.target.copy(target);
+    this.camera.lookAt(target);
   }
 
-  zoomToLetter() {
+  enterLetter() {
     if (!this.letterMesh) return;
     this.isWriting = true;
+    this.letterWriting.inLetterMode = true;
+    this.setHovered(null);
     if (this.controls) this.controls.enabled = false;
 
-    const { position, target } = this.getLetterViewPose();
-    this.animateCamera(
-      { x: position.x, y: position.y, z: position.z },
-      { x: target.x, y: target.y, z: target.z },
-    );
+    this.applyLetterCamera();
+    this.applyLetterLayout();
+    this.letter.group.visible = true;
+
+    const material = this.darkBackgroundPlane.material;
+    gsap.killTweensOf(material);
+    material.opacity = 0;
+    this.darkBackgroundPlane.visible = true;
+    gsap.to(material, {
+      opacity: this.params.overlayOpacity,
+      duration: 0.6,
+      ease: "power2.out",
+    });
   }
 
-  resetCamera() {
+  refreshView() {
+    if (this.isWriting) {
+      this.applyLetterCamera();
+      this.applyLetterLayout();
+      const material = this.darkBackgroundPlane.material;
+      gsap.killTweensOf(material);
+      material.opacity = this.params.overlayOpacity;
+    } else {
+      this.setCameraPose(this.params.cameraPosition, this.params.cameraTarget);
+      this.controls?.update();
+    }
+  }
+
+  leaveLetter() {
     this.isWriting = false;
-    this.animateCamera(
-      {
-        x: DEFAULT_CAMERA_POS.x,
-        y: DEFAULT_CAMERA_POS.y,
-        z: DEFAULT_CAMERA_POS.z,
-      },
-      {
-        x: DEFAULT_CAMERA_TARGET.x,
-        y: DEFAULT_CAMERA_TARGET.y,
-        z: DEFAULT_CAMERA_TARGET.z,
-      },
-      () => {
-        if (this.controls) {
-          this.controls.enabled = true;
-          this.controls.update();
-        }
-      },
-    );
+    this.letterWriting.inLetterMode = false;
+    this.letterWriting.cancelImage();
+    this.letter.group.visible = false;
+    gsap.killTweensOf(this.darkBackgroundPlane.material);
+    this.darkBackgroundPlane.visible = false;
+
+    this.setCameraPose(this.params.cameraPosition, this.params.cameraTarget);
+    if (this.controls) {
+      this.controls.enabled = true;
+      this.controls.update();
+    }
   }
 
   resize() {
     super.resize();
-    // Keep the letter framed when the window is resized while writing.
-    if (this.isWriting && !this.isCameraAnimating && this.letterMesh) {
-      const { position, target } = this.getLetterViewPose();
-      this.camera.position.copy(position);
-      if (this.controls) this.controls.target.copy(target);
-      this.camera.lookAt(target);
-    }
+    this.labelRenderer?.setSize(this.viewport.width, this.viewport.height);
   }
 
   destroy() {
     document.removeEventListener("pointerdown", this.onClick);
-    gsap.killTweensOf(this.camera.position);
-    if (this.controls) gsap.killTweensOf(this.controls.target);
+    const canvas = this.renderer.domElement;
+    canvas.removeEventListener("pointermove", this.onPointerMove);
+    canvas.removeEventListener("pointerleave", this.onPointerLeave);
+    if (this.pipeline) gsap.killTweensOf(this.pipeline.params.strength);
+    this.hovered = null;
+    this.hoverables = [];
+
+    if (this.labelRenderer) {
+      this.labelRenderer.domElement.remove();
+      this.labelRenderer = null;
+    }
     this.letterMesh = null;
+
+    if (this.darkBackgroundPlane) {
+      gsap.killTweensOf(this.darkBackgroundPlane.material);
+      this.scene.remove(this.darkBackgroundPlane);
+      this.darkBackgroundPlane.geometry.dispose();
+      this.darkBackgroundPlane.material.dispose();
+      this.darkBackgroundPlane = null;
+    }
 
     if (this.pane) {
       this.pane.dispose();
@@ -312,6 +458,20 @@ export class SceneApp extends WebGLApp {
       }
       this.letter.destroy();
       this.letter = null;
+    }
+
+    if (this.island) {
+      if (this.island.group) {
+        this.scene.remove(this.island.group);
+      }
+      this.island.destroy();
+      this.island = null;
+    }
+
+    if (this.bottle) {
+      if (this.bottle.group) this.scene.remove(this.bottle.group);
+      this.bottle.destroy();
+      this.bottle = null;
     }
 
     if (this.assetLoader) {
@@ -340,5 +500,8 @@ export class SceneApp extends WebGLApp {
   }
   setupEventListeners() {
     document.addEventListener("pointerdown", this.onClick);
+    const canvas = this.renderer.domElement;
+    canvas.addEventListener("pointermove", this.onPointerMove);
+    canvas.addEventListener("pointerleave", this.onPointerLeave);
   }
 }

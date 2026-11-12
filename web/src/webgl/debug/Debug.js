@@ -19,6 +19,9 @@ export class Debug {
     this.createFogDebug();
     this.createOceanDebug();
     this.createLetterDebug();
+    this.createCameraDebug();
+    this.createLetterViewDebug();
+    this.createOutlineDebug();
   }
 
   setupPresetManagement() {
@@ -95,6 +98,7 @@ export class Debug {
   refreshBindings() {
     this.scene.renderer && (this.scene.renderer.needsUpdate = true);
     this.scene.letterWriting?.render();
+    this.scene.refreshView?.();
   }
 
   createRendererDebug() {
@@ -152,6 +156,38 @@ export class Debug {
       max: 1000,
       step: 1,
     });
+
+    const s = this.scene;
+    if (!s.uSkyZenith) return;
+    const colorOpt = { color: { type: "float" } };
+    const folderSky = this.pane.addFolder({ title: "Ciel", expanded: false });
+    folderSky.addBinding(s.uSkyMid, "value", { label: "Milieu", ...colorOpt });
+    folderSky.addBinding(s.uSkyZenith, "value", {
+      label: "Zénith",
+      ...colorOpt,
+    });
+    folderSky.addBinding(s.uSkyMidHeight, "value", {
+      label: "Hauteur milieu",
+      min: 0.02,
+      max: 0.9,
+      step: 0.01,
+    });
+    folderSky.addBinding(s.uSunColor, "value", {
+      label: "Halo soleil",
+      ...colorOpt,
+    });
+    folderSky.addBinding(s.uSunHalo, "value", {
+      label: "Intensité halo",
+      min: 0,
+      max: 1,
+      step: 0.01,
+    });
+    folderSky.addBinding(s.uSunSize, "value", {
+      label: "Taille halo (inv.)",
+      min: 1,
+      max: 64,
+      step: 1,
+    });
   }
 
   createOceanDebug() {
@@ -200,7 +236,7 @@ export class Debug {
         ...colorOpt,
       });
 
-    const folderFoam = folderOcean.addFolder({ title: "Écume (Foam)" });
+    const folderFoam = folderOcean.addFolder({ title: "Écume" });
     if (mat.uFoamScale)
       folderFoam.addBinding(mat.uFoamScale, "value", {
         label: "Échelle",
@@ -234,6 +270,106 @@ export class Debug {
         label: "Couleur",
         ...colorOpt,
       });
+  }
+
+  createCameraDebug() {
+    const params = this.scene.params;
+    if (!params) return;
+
+    const folder = this.pane.addFolder({ title: "Caméra", expanded: false });
+    const onChange = () => this.scene.refreshView();
+    const point = { x: { step: 0.5 }, y: { step: 0.5 }, z: { step: 0.5 } };
+    const angle = { x: { step: 0.5 }, y: { step: 0.5 }, z: { step: 0.5 } };
+
+    folder
+      .addBinding(params, "cameraPosition", { label: "Île position", ...point })
+      .on("change", onChange);
+    folder
+      .addBinding(params, "cameraTarget", { label: "Île cible", ...point })
+      .on("change", onChange);
+    folder
+      .addBinding(params, "barrelCameraPosition", {
+        label: "Lettre position",
+        ...point,
+      })
+      .on("change", onChange);
+    folder
+      .addBinding(params, "barrelCameraRotation", {
+        label: "Lettre rotation (°)",
+        ...angle,
+      })
+      .on("change", onChange);
+  }
+
+  createLetterViewDebug() {
+    const params = this.scene.params;
+    if (!params) return;
+
+    const folder = this.pane.addFolder({ title: "Vue lettre", expanded: false });
+    const onChange = () => this.scene.refreshView();
+    const point = { x: { step: 0.1 }, y: { step: 0.1 }, z: { step: 0.1 } };
+
+    folder
+      .addBinding(params, "letterPosition", { label: "Lettre position", ...point })
+      .on("change", onChange);
+    folder
+      .addBinding(params, "letterScale", {
+        label: "Lettre échelle",
+        min: 0.01,
+        max: 2,
+        step: 0.005,
+      })
+      .on("change", onChange);
+    folder
+      .addBinding(params, "overlayPosition", {
+        label: "Overlay · position",
+        ...point,
+      })
+      .on("change", onChange);
+    folder
+      .addBinding(params, "overlayOpacity", {
+        label: "Overlay · opacité",
+        min: 0,
+        max: 1,
+        step: 0.01,
+      })
+      .on("change", onChange);
+  }
+
+  createOutlineDebug() {
+    const outline = this.scene.pipeline?.params;
+    const params = this.scene.params;
+    if (!outline || !params) return;
+
+    const folder = this.pane.addFolder({ title: "Outline", expanded: false });
+    const colorOpt = { color: { type: "float" } };
+
+    folder.addBinding(params, "outlineStrength", {
+      label: "Intensité",
+      min: 0,
+      max: 50,
+      step: 0.05,
+    });
+    folder.addBinding(outline.thickness, "value", {
+      label: "Épaisseur",
+      min: 0,
+      max: 100,
+      step: 0.1,
+    });
+    folder.addBinding(outline.glow, "value", {
+      label: "Glow",
+      min: 0,
+      max: 50,
+      step: 0.05,
+    });
+    folder.addBinding(outline.visibleColor, "value", {
+      label: "Couleur visible",
+      ...colorOpt,
+    });
+    folder.addBinding(outline.hiddenColor, "value", {
+      label: "Couleur cachée",
+      ...colorOpt,
+    });
   }
 
   createLetterDebug() {
@@ -275,7 +411,6 @@ export class Debug {
         label: "Simuler Pression",
       });
 
-      // Tweakpane can't bind functions: bind the easing name, map it back.
       const easingName =
         Object.keys(EASINGS).find(
           (name) => EASINGS[name] === letter.drawingOptions.easing,
@@ -293,8 +428,8 @@ export class Debug {
     }
 
     if (letter.erasingOptions) {
-      const fErase = fLetter.addFolder({ title: "Gomme", expanded: false });
-      fErase.addBinding(letter.erasingOptions, "size", {
+      const folderErase = fLetter.addFolder({ title: "Gomme", expanded: false });
+      folderErase.addBinding(letter.erasingOptions, "size", {
         min: 5,
         max: 100,
         step: 1,

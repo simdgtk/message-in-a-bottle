@@ -81,7 +81,7 @@ export class WebGLApp {
     const elapsed = this.timer.getElapsed();
     const delta = this.timer.getDelta();
 
-    if (this.controls) {
+    if (this.controls?.enabled) {
       this.controls.update();
     }
 

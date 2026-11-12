@@ -11,7 +11,7 @@ export function createShadowPipeline(
   camera,
   { factor = shadowParams.factor } = {},
 ) {
-  const postProcessing = new THREE.PostProcessing(renderer);
+  const postProcessing = new THREE.RenderPipeline(renderer);
 
   const scenePass = pass(scene, camera);
 

@@ -1,7 +1,6 @@
 # Dependencies & builds
 node_modules/
 dist/
-graphify-out/
 
 # Go binaries
 api/api
@@ -13,3 +12,6 @@ api/tmp/
 .vscode/
 .idea/
 *.log
+
+.claude
+graphify-out/
