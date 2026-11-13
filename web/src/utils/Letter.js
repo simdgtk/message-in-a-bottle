@@ -30,7 +30,6 @@ export class Letter {
     this.fontSize = options.fontSize || 30;
     this.fontFamily = "'Cursive', cursive";
     this.fontColor = options.fontColor || "#533029";
-    this.padding = options.padding ?? 50;
     this.lineHeight = Math.round(this.fontSize * 1.2);
     this.dpr = options.dpr || 1;
     this.imageAddingMode = false;
@@ -99,6 +98,9 @@ export class Letter {
     this.ghostRotation = null;
     this.ghostSize = null;
     this.dampingFactor = 0.25;
+
+    this.cursorTarget = null;
+    this.cursorPos = null;
     this.imageMargin = 100;
 
     this.inLetterMode = false;
@@ -167,9 +169,8 @@ export class Letter {
     // this.render();
   }
 
-  startTextBlock() {
-    this.removeTextarea();
-    this.activeText = { tool: "text", content: "" };
+  ensureTextarea() {
+    if (this.textarea) return this.textarea;
 
     const textarea = document.createElement("textarea");
     textarea.className = "letter-input";
@@ -187,11 +188,34 @@ export class Letter {
     textarea.addEventListener("input", () => this.onTextareaInput());
     textarea.addEventListener("keydown", (e) => {
       if (e.key === "Backspace" || e.key === "Delete") e.preventDefault();
+      if (e.key === "Escape") this.endTextBlock();
     });
     textarea.addEventListener("cut", (e) => e.preventDefault());
 
     (this.textContainer ?? document.body).appendChild(textarea);
     this.textarea = textarea;
+    return textarea;
+  }
+
+  startTextBlock({ x, y }) {
+    this.endTextBlock();
+    this.activeText = {
+      tool: "text",
+      content: "",
+      x,
+      y: y - this.fontSize / 2,
+    };
+    const textarea = this.ensureTextarea();
+    textarea.value = "";
+    textarea.focus({ preventScroll: true });
+  }
+
+  endTextBlock() {
+    this.activeText = null;
+    if (this.textarea) {
+      this.textarea.value = "";
+      this.textarea.blur();
+    }
   }
 
   onTextareaInput() {
@@ -203,19 +227,14 @@ export class Letter {
   }
 
   removeTextarea() {
+    this.activeText = null;
     this.textarea?.remove();
     this.textarea = null;
   }
 
   setTool(tool) {
     if (!TOOLS.includes(tool)) return this.tool;
-    if (tool === this.tool) {
-      if (tool === "text" && this.activeText?.content) {
-        this.startTextBlock();
-        this.focusInput();
-      }
-      return tool;
-    }
+    if (tool === this.tool) return tool;
 
     if (this.tool === "photo" && this.imageAddingMode) {
       this.img = null;
@@ -232,18 +251,17 @@ export class Letter {
     this.erasingMode = tool === "erase";
     if (this.points.length > 0) this.isDirty = true;
     this.points = [];
-    if (tool === "text") {
-      this.startTextBlock();
-      this.focusInput();
-    }
+    this.endTextBlock();
+    this.cursorTarget = null;
+    this.cursorPos = null;
+    this.isDirty = true;
 
     this.onToolChange?.(tool);
     return tool;
   }
 
   focusInput() {
-    if (this.tool !== "text") return;
-    if (!this.textarea) this.startTextBlock();
+    if (this.tool !== "text" || !this.activeText || !this.textarea) return;
     if (document.activeElement !== this.textarea) {
       this.textarea.focus({ preventScroll: true });
     }
@@ -251,18 +269,15 @@ export class Letter {
 
   back() {
     const last = this.history.pop();
-    if (last && last === this.activeText) {
-      last.content = "";
-      if (this.textarea) this.textarea.value = "";
-    }
+    if (last && last === this.activeText) this.endTextBlock();
     this.isDirty = true;
   }
 
   clear() {
     this.history = [];
     this.points = [];
+    this.endTextBlock();
     this.isDirty = true;
-    if (this.tool === "text") this.startTextBlock();
   }
 
   getPointerCoords(e) {
@@ -283,9 +298,16 @@ export class Letter {
   }
 
   handlePointerDown(e) {
-    if (!this.drawingMode && !this.imageAddingMode) return;
+    const isText = this.tool === "text" && !this.imageAddingMode;
+    if (!this.drawingMode && !this.imageAddingMode && !isText) return;
     const coords = this.getPointerCoords(e);
     if (!coords) return;
+    if (isText) {
+      e.preventDefault();
+      this.startTextBlock(coords);
+      this.isDirty = true;
+      return;
+    }
     if (this.imageAddingMode) {
       e.preventDefault();
       const { x, y } = this.ghostPos ?? coords;
@@ -317,6 +339,15 @@ export class Letter {
   }
 
   handlePointerMove(e) {
+    if (this.tool === "text" && !this.imageAddingMode) {
+      const coords = this.getPointerCoords(e);
+      const wasShown = !!this.cursorTarget;
+      this.cursorTarget = coords;
+      if (!coords) this.cursorPos = null;
+      else if (!this.cursorPos) this.cursorPos = { ...coords };
+      if (wasShown !== !!coords) this.isDirty = true;
+      return;
+    }
     if (this.imageAddingMode) {
       const coords = this.getPointerCoords(e);
       if (!coords) return;
@@ -358,72 +389,35 @@ export class Letter {
     }
   }
 
-  getLines(ctx, rawText, maxWidth) {
-    const lines = [];
-    let offset = 0;
-
-    for (const paragraph of (rawText ?? "").split("\n")) {
-      const words = paragraph.split(" ");
-      let current = "";
-      let start = offset;
-
-      words.forEach((word, i) => {
-        const testLine = i === 0 ? word : `${current} ${word}`;
-        if (i > 0 && current && ctx.measureText(testLine).width > maxWidth) {
-          lines.push({ text: current, start });
-          start += current.length + 1;
-          current = word;
-        } else {
-          current = testLine;
-        }
-      });
-
-      lines.push({ text: current, start });
-      offset += paragraph.length + 1;
-    }
-
-    return lines;
-  }
-
-  layoutText(ctx) {
+  drawText(ctx, { content, x, y }) {
     ctx.font = `${this.fontSize}px ${this.fontFamily}`;
     ctx.textBaseline = "top";
-
-    const ranges = new Map();
-    let full = "";
-    for (const entry of this.history) {
-      if (entry.tool !== "text") continue;
-      ranges.set(entry, [full.length, full.length + entry.content.length]);
-      full += entry.content;
-    }
-
-    const area = this.contentRect;
-    const maxWidth = Math.max(100, area.w - this.padding * 2);
-    return {
-      ranges,
-      lines: this.getLines(ctx, full, maxWidth),
-      x0: area.x + this.padding,
-      y0: area.y + this.padding,
-    };
+    ctx.fillStyle = this.fontColor;
+    content.split("\n").forEach((line, i) => {
+      ctx.fillText(line, x, y + i * this.lineHeight);
+    });
   }
 
-  drawTextRange(ctx, { ranges, lines, x0, y0 }, entry) {
-    const range = ranges.get(entry);
-    if (!range) return;
-    const [from, to] = range;
-
+  drawCursor(ctx) {
+    if (this.tool !== "text" || !this.cursorPos || !this.cursorTarget) return;
+    const height = this.fontSize * 1.1;
     ctx.fillStyle = this.fontColor;
-    lines.forEach(({ text: line, start }, i) => {
-      const a = Math.max(from, start) - start;
-      const b = Math.min(to, start + line.length) - start;
-      if (a >= b) return;
-      const x = x0 + ctx.measureText(line.slice(0, a)).width;
-      ctx.fillText(line.slice(a, b), x, y0 + i * this.lineHeight);
-    });
+    ctx.fillRect(this.cursorPos.x - 1.5, this.cursorPos.y - height / 2, 3, height);
   }
 
   update(deltaMs) {
     if (!this.inLetterMode) return;
+
+    if (this.tool === "text" && this.cursorPos && this.cursorTarget) {
+      const nextX = damp(this.cursorPos.x, this.cursorTarget.x, this.dampingFactor, deltaMs);
+      const nextY = damp(this.cursorPos.y, this.cursorTarget.y, this.dampingFactor, deltaMs);
+      const moved =
+        Math.abs(nextX - this.cursorPos.x) > 0.05 ||
+        Math.abs(nextY - this.cursorPos.y) > 0.05;
+      this.cursorPos.x = nextX;
+      this.cursorPos.y = nextY;
+      if (moved) this.isDirty = true;
+    }
 
     if (this.imageAddingMode && this.ghostPos && this.ghostTarget) {
       const nextX = damp(
@@ -503,11 +497,9 @@ export class Letter {
     ctx.scale(this.dpr, this.dpr);
     ctx.clearRect(0, 0, width, height);
 
-    const textLayout = this.layoutText(ctx);
-
     for (const entry of this.history) {
       if (entry.tool === "text") {
-        this.drawTextRange(ctx, textLayout, entry);
+        this.drawText(ctx, entry);
       } else if (entry.tool === "draw") {
         ctx.fillStyle = entry.color || this.fontColor;
         ctx.fill(new Path2D(entry.path));
@@ -576,6 +568,8 @@ export class Letter {
     } else {
       out.drawImage(this.inkCanvas, 0, 0);
       out.drawImage(this.photoCanvas, 0, 0);
+      out.scale(this.dpr, this.dpr);
+      this.drawCursor(out);
     }
     out.restore();
 

@@ -24,6 +24,7 @@ import { createOutlinePipeline } from "@/webgl/postprocessing/OutlinePass.js";
 import { SkyMaterial } from "@/webgl/materials/Sky";
 import { AudioManager } from "@/webgl/core/AudioManager";
 import { Cloud } from "@/webgl/objects/Cloud.js";
+import { damp } from "@/utils/maths.js";
 
 const HORIZON = 0xa3cbe4;
 const DEFAULT_CAMERA_POS = new THREE.Vector3(-109.5, 39, 21.5);
@@ -94,8 +95,16 @@ export class SceneApp extends WebGLApp {
       cameraTarget: DEFAULT_CAMERA_TARGET.clone(),
       loginCameraPosition: LOGIN_CAMERA_POS.clone(),
       loginCameraTarget: LOGIN_CAMERA_TARGET.clone(),
+      islandPosition: ISLAND_POS.clone(),
+      islandScale: 1,
       islandRotation: ISLAND_ROTATION.clone(),
+      loginIslandPosition: LOGIN_ISLAND_POS.clone(),
+      loginIslandScale: LOGIN_ISLAND_SCALE,
       loginIslandRotation: LOGIN_ISLAND_ROTATION.clone(),
+      bottlePosition: BOTTLE_POS.clone(),
+      bottleScale: 1,
+      bottleFloatingAmplitude: BOTTLE_FLOATING_AMPLITUDE,
+      bottleFloatingSpeed: BOTTLE_FLOATING_SPEED,
       barrelCameraPosition: LETTER_CAMERA_POS.clone(),
       barrelCameraRotation: LETTER_CAMERA_ROTATION.clone(),
       letterPosition: LETTER_POS.clone(),
@@ -104,7 +113,7 @@ export class SceneApp extends WebGLApp {
       overlayOpacity: DARK_BACKGROUND_OPACITY,
       outlineStrength: 3,
       parallaxStrength: 2.5,
-      parallaxSmoothing: 3,
+      parallaxSmoothing: 0.06,
     };
 
     this.labelRenderer = null;
@@ -146,13 +155,15 @@ export class SceneApp extends WebGLApp {
     ]);
     letterGroup.visible = false;
     this.scene.add(letterGroup);
-    islandGroup.position.copy(ISLAND_POS);
+    islandGroup.position.copy(this.params.islandPosition);
     this.scene.add(islandGroup);
-    bottleGroup.position.copy(BOTTLE_POS);
+    bottleGroup.position.copy(this.params.bottlePosition);
     bottleGroup.rotation.z = Math.PI / 8;
     this.scene.add(bottleGroup);
     this.islandBasePosition.copy(islandGroup.position);
     this.islandBaseScale = islandGroup.scale.x;
+    this.params.islandScale = this.islandBaseScale;
+    this.params.bottleScale = bottleGroup.scale.x;
 
     letterGroup.traverse((child) => {
       if (!child.isMesh) return;
@@ -235,14 +246,15 @@ export class SceneApp extends WebGLApp {
 
   updateParallax(delta) {
     const goal = this.isWriting ? 0 : 1;
-    const t = 1 - Math.exp(-delta * this.params.parallaxSmoothing);
-    this.parallax.x += (this.parallaxPointer.x * goal - this.parallax.x) * t;
-    this.parallax.y += (this.parallaxPointer.y * goal - this.parallax.y) * t;
+    const smoothing = this.params.parallaxSmoothing;
+    const dt = delta * 1000;
+    this.parallax.x = damp(this.parallax.x, this.parallaxPointer.x * goal, smoothing, dt);
+    this.parallax.y = damp(this.parallax.y, this.parallaxPointer.y * goal, smoothing, dt);
   }
 
   applyParallax() {
     if (this.isWriting) return false;
-    const target = this.controls?.target ?? this.viewPose[1];
+    const target = this.viewPose[1];
     const strength = this.params.parallaxStrength;
     this.parallaxBasePosition.copy(this.camera.position);
     this.parallaxBaseQuaternion.copy(this.camera.quaternion);
@@ -277,10 +289,15 @@ export class SceneApp extends WebGLApp {
     this.updateParallax(delta);
 
     if (this.bottle?.group) {
+      const {
+        bottlePosition: pos,
+        bottleFloatingSpeed: speed,
+        bottleFloatingAmplitude: amp,
+      } = this.params;
+      this.bottle.group.position.x = pos.x;
+      this.bottle.group.position.z = pos.z;
       this.bottle.group.rotation.y = Math.sin(elapsed * 0.2);
-      this.bottle.group.position.y =
-        BOTTLE_POS.y +
-        Math.sin(elapsed * BOTTLE_FLOATING_SPEED) * BOTTLE_FLOATING_AMPLITUDE;
+      this.bottle.group.position.y = pos.y + Math.sin(elapsed * speed) * amp;
     }
 
     for (const cloud of this.clouds) {
@@ -406,13 +423,8 @@ export class SceneApp extends WebGLApp {
     this.setHovered(null);
     const [cameraPosition, cameraTarget] = this.viewPose;
     this.setCameraPose(cameraPosition, cameraTarget);
-    this.island.group.position.copy(
-      this.isLogin ? LOGIN_ISLAND_POS : this.islandBasePosition,
-    );
-    this.island.group.scale.setScalar(
-      this.isLogin ? LOGIN_ISLAND_SCALE : this.islandBaseScale,
-    );
-    this.applyIslandRotation();
+    this.applyIslandTransform();
+    this.applyBottleTransform();
     this.updateBottle();
   }
 
@@ -495,17 +507,26 @@ export class SceneApp extends WebGLApp {
     this.audioManager.setLetterMode(true);
     this.setHovered(null);
 
+    for (const cloud of this.clouds) {
+      if (cloud.mesh) cloud.mesh.visible = false;
+    }
+
     this.applyLetterCamera();
     this.applyLetterLayout();
     this.letter.group.visible = true;
     this.endDarkBackgroundPlaneTransition();
   }
 
-  applyIslandRotation() {
+  applyIslandTransform() {
     if (!this.island?.group) return;
-    const r = this.isLogin
-      ? this.params.loginIslandRotation
-      : this.params.islandRotation;
+    const p = this.params;
+    this.island.group.position.copy(
+      this.isLogin ? p.loginIslandPosition : p.islandPosition,
+    );
+    this.island.group.scale.setScalar(
+      this.isLogin ? p.loginIslandScale : p.islandScale,
+    );
+    const r = this.isLogin ? p.loginIslandRotation : p.islandRotation;
     this.island.group.rotation.set(
       THREE.MathUtils.degToRad(r.x),
       THREE.MathUtils.degToRad(r.y),
@@ -513,8 +534,15 @@ export class SceneApp extends WebGLApp {
     );
   }
 
+  applyBottleTransform() {
+    if (!this.bottle?.group) return;
+    this.bottle.group.position.copy(this.params.bottlePosition);
+    this.bottle.group.scale.setScalar(this.params.bottleScale);
+  }
+
   refreshView() {
-    this.applyIslandRotation();
+    this.applyIslandTransform();
+    this.applyBottleTransform();
     if (this.isWriting) {
       this.applyLetterCamera();
       this.applyLetterLayout();
@@ -535,6 +563,10 @@ export class SceneApp extends WebGLApp {
     this.letter.group.visible = false;
     gsap.killTweensOf(this.darkBackgroundPlane.material);
     this.darkBackgroundPlane.visible = false;
+
+    for (const cloud of this.clouds) {
+      if (cloud.mesh) cloud.mesh.visible = true;
+    }
 
     this.setCameraPose(this.params.cameraPosition, this.params.cameraTarget);
   }

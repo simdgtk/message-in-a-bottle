@@ -1,47 +1,47 @@
 @font-face {
-  font-family: 'Canaria';
+  font-family: "Canaria";
   src:
-    url('/fonts/canaria/canaria.woff2') format('woff2'),
-    url('/fonts/canaria/canaria.woff') format('woff');
+    url("/fonts/canaria/canaria.woff2") format("woff2"),
+    url("/fonts/canaria/canaria.woff") format("woff");
   font-weight: 400;
   font-style: normal;
   font-display: swap;
 }
 
 @font-face {
-  font-family: 'Canaria';
+  font-family: "Canaria";
   src:
-    url('/fonts/canaria/canaria-mediana.woff2') format('woff2'),
-    url('/fonts/canaria/canaria-mediana.woff') format('woff');
+    url("/fonts/canaria/canaria-mediana.woff2") format("woff2"),
+    url("/fonts/canaria/canaria-mediana.woff") format("woff");
   font-weight: 500;
   font-style: normal;
   font-display: swap;
 }
 
 @font-face {
-  font-family: 'Canaria';
+  font-family: "Canaria";
   src:
-    url('/fonts/canaria/canaria-grande.woff2') format('woff2'),
-    url('/fonts/canaria/canaria-grande.woff') format('woff');
+    url("/fonts/canaria/canaria-grande.woff2") format("woff2"),
+    url("/fonts/canaria/canaria-grande.woff") format("woff");
   font-weight: 700;
   font-style: normal;
   font-display: swap;
 }
 
 @font-face {
-  font-family: 'Cursive';
+  font-family: "Cursive";
   src:
-    url('/fonts/cursive/cursive.woff2') format('woff2'),
-    url('/fonts/cursive/cursive.woff') format('woff'),
-    url('/fonts/cursive/cursive.ttf') format('truetype');
+    url("/fonts/cursive/cursive.woff2") format("woff2"),
+    url("/fonts/cursive/cursive.woff") format("woff"),
+    url("/fonts/cursive/cursive.ttf") format("truetype");
   font-weight: 400;
   font-style: normal;
   font-display: swap;
 }
 
 :root {
-  --font-primary: 'Canaria', Helvetica, sans-serif;
-  --font-cursive: 'Cursive', sans-serif;
+  --font-primary: "Canaria", Helvetica, sans-serif;
+  --font-cursive: "Cursive", sans-serif;
 }
 
 body {
@@ -77,12 +77,9 @@ body {
   font-size: 32px;
   pointer-events: none;
   opacity: 0;
-  translate: 0 6px;
   font-weight: 700;
   text-transform: uppercase;
-  transition:
-    opacity 0.25s ease,
-    translate 0.25s ease;
+  transition: opacity 0.25s ease;
 
   &.is-visible {
     opacity: 1;

@@ -1,6 +1,7 @@
 import { Pane } from "tweakpane";
 import * as THREE from "three/webgpu";
 import { EASINGS } from "@/utils/easings.js";
+import { shadowColor } from "@/webgl/materials/BaseShadow.js";
 
 const STORAGE_KEY = "webgl_debug_preset";
 
@@ -18,13 +19,14 @@ export class Debug {
 
   createDebug() {
     this.createRendererDebug();
+    this.createLightsDebug();
     this.createFogDebug();
     this.createOceanDebug();
     this.createLetterDebug();
     this.createCameraDebug();
     this.createIslandDebug();
+    this.createBottleDebug();
     this.createLetterViewDebug();
-    this.createOutlineDebug();
   }
 
   setupPresetManagement() {
@@ -136,6 +138,74 @@ export class Debug {
       max: 5,
       step: 0.05,
     });
+  }
+
+  createLightsDebug() {
+    const { sun, hemiLight } = this.scene;
+    if (!sun && !hemiLight) return;
+
+    const folder = this.pane.addFolder({
+      title: "Lumières & Ombres",
+      expanded: false,
+    });
+    const colorOpt = { color: { type: "float" } };
+    const point = { x: { step: 1 }, y: { step: 1 }, z: { step: 1 } };
+
+    if (sun) {
+      const folderSun = folder.addFolder({ title: "Soleil" });
+      folderSun.addBinding(sun, "position", { label: "Position", ...point });
+      folderSun.addBinding(sun, "intensity", {
+        label: "Intensité",
+        min: 0,
+        max: 10,
+        step: 0.1,
+      });
+      folderSun.addBinding(sun, "color", { label: "Couleur", ...colorOpt });
+
+      if (sun.shadow) {
+        const folderShadow = folder.addFolder({ title: "Ombres" });
+        folderShadow.addBinding(shadowColor, "value", {
+          label: "Teinte ombre",
+          ...colorOpt,
+        });
+        folderShadow.addBinding(sun.shadow, "bias", {
+          label: "Bias",
+          min: -0.01,
+          max: 0.01,
+          step: 0.0001,
+        });
+        folderShadow.addBinding(sun.shadow, "normalBias", {
+          label: "Normal Bias",
+          min: -0.1,
+          max: 0.2,
+          step: 0.005,
+        });
+        folderShadow.addBinding(sun.shadow, "radius", {
+          label: "Rayon (flou)",
+          min: 0,
+          max: 20,
+          step: 0.5,
+        });
+      }
+    }
+
+    if (hemiLight) {
+      const folderHemisphere = folder.addFolder({ title: "Hémisphère" });
+      folderHemisphere.addBinding(hemiLight, "intensity", {
+        label: "Intensité",
+        min: 0,
+        max: 5,
+        step: 0.05,
+      });
+      folderHemisphere.addBinding(hemiLight, "color", {
+        label: "Couleur ciel",
+        ...colorOpt,
+      });
+      folderHemisphere.addBinding(hemiLight, "groundColor", {
+        label: "Couleur sol",
+        ...colorOpt,
+      });
+    }
   }
 
   createFogDebug() {
@@ -316,9 +386,9 @@ export class Debug {
     });
     folder.addBinding(params, "parallaxSmoothing", {
       label: "Parallaxe douceur",
-      min: 0.5,
-      max: 10,
-      step: 0.1,
+      min: 0.01,
+      max: 0.2,
+      step: 0.005,
     });
   }
 
@@ -328,6 +398,7 @@ export class Debug {
 
     const folder = this.pane.addFolder({ title: "Île", expanded: false });
     const onChange = () => this.scene.refreshView();
+    const point = { x: { step: 0.5 }, y: { step: 0.5 }, z: { step: 0.5 } };
     const angle = {
       x: { min: -180, max: 180, step: 1 },
       y: { min: -180, max: 180, step: 1 },
@@ -335,7 +406,32 @@ export class Debug {
     };
 
     folder
+      .addBinding(params, "islandPosition", { label: "Position", ...point })
+      .on("change", onChange);
+    folder
+      .addBinding(params, "islandScale", {
+        label: "Échelle",
+        min: 0.1,
+        max: 5,
+        step: 0.05,
+      })
+      .on("change", onChange);
+    folder
       .addBinding(params, "islandRotation", { label: "Rotation (°)", ...angle })
+      .on("change", onChange);
+    folder
+      .addBinding(params, "loginIslandPosition", {
+        label: "Login position",
+        ...point,
+      })
+      .on("change", onChange);
+    folder
+      .addBinding(params, "loginIslandScale", {
+        label: "Login échelle",
+        min: 0.1,
+        max: 5,
+        step: 0.05,
+      })
       .on("change", onChange);
     folder
       .addBinding(params, "loginIslandRotation", {
@@ -343,6 +439,39 @@ export class Debug {
         ...angle,
       })
       .on("change", onChange);
+  }
+
+  createBottleDebug() {
+    const params = this.scene.params;
+    if (!params) return;
+
+    const folder = this.pane.addFolder({ title: "Bouteille", expanded: false });
+    const onChange = () => this.scene.refreshView();
+    const point = { x: { step: 0.5 }, y: { step: 0.2 }, z: { step: 0.5 } };
+
+    folder
+      .addBinding(params, "bottlePosition", { label: "Position", ...point })
+      .on("change", onChange);
+    folder
+      .addBinding(params, "bottleScale", {
+        label: "Échelle",
+        min: 0.05,
+        max: 3,
+        step: 0.05,
+      })
+      .on("change", onChange);
+    folder.addBinding(params, "bottleFloatingAmplitude", {
+      label: "Flottaison amp.",
+      min: 0,
+      max: 5,
+      step: 0.05,
+    });
+    folder.addBinding(params, "bottleFloatingSpeed", {
+      label: "Flottaison vit.",
+      min: 0,
+      max: 5,
+      step: 0.05,
+    });
   }
 
   createLetterViewDebug() {
@@ -378,42 +507,6 @@ export class Debug {
         step: 0.01,
       })
       .on("change", onChange);
-  }
-
-  createOutlineDebug() {
-    const outline = this.scene.pipeline?.params;
-    const params = this.scene.params;
-    if (!outline || !params) return;
-
-    const folder = this.pane.addFolder({ title: "Outline", expanded: false });
-    const colorOpt = { color: { type: "float" } };
-
-    folder.addBinding(params, "outlineStrength", {
-      label: "Intensité",
-      min: 0,
-      max: 50,
-      step: 0.05,
-    });
-    folder.addBinding(outline.thickness, "value", {
-      label: "Épaisseur",
-      min: 0,
-      max: 100,
-      step: 0.1,
-    });
-    folder.addBinding(outline.glow, "value", {
-      label: "Glow",
-      min: 0,
-      max: 50,
-      step: 0.05,
-    });
-    folder.addBinding(outline.visibleColor, "value", {
-      label: "Couleur visible",
-      ...colorOpt,
-    });
-    folder.addBinding(outline.hiddenColor, "value", {
-      label: "Couleur cachée",
-      ...colorOpt,
-    });
   }
 
   createLetterDebug() {
@@ -491,16 +584,6 @@ export class Debug {
       })
       .on("change", ({ value }) => {
         letter.lineHeight = Math.round(value * 1.2);
-        letter.render();
-      });
-    folderText
-      .addBinding(letter, "padding", {
-        min: 0,
-        max: 200,
-        step: 5,
-        label: "Marge",
-      })
-      .on("change", () => {
         letter.render();
       });
     folderText

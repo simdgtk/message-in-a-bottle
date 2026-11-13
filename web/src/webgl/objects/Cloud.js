@@ -17,8 +17,8 @@ export class Cloud {
     z = 0,
     scale = 45,
     speed = 3,
-    minZ = -300,
-    maxZ = 300,
+    minZ = -400,
+    maxZ = 400,
     textureIndex = 0,
   } = {}) {
     this.speed = speed;

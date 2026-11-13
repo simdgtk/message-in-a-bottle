@@ -2,7 +2,7 @@
   <div ref="overlayRef" class="letter-overlay">
     <div
       class="letter-zone"
-      :class="`is-tool-${tool}`"
+      :class="[`is-tool-${tool}`, { 'is-over-letter': isOverLetter }]"
       @pointerdown="onPointerDown"
       @pointermove="onPointerMove"
       @pointerup="onPointerUp"
@@ -124,6 +124,7 @@ const overlayRef = ref(null);
 const imageInputRef = ref(null);
 const isFontReady = ref(false);
 const tool = ref(props.letter?.tool ?? "text");
+const isOverLetter = ref(false);
 
 const TOOLBAR = [
   { tool: "text", icon: "feather", label: "Écrire" },
@@ -163,15 +164,12 @@ function onPointerDown(e) {
     focusInput();
     return;
   }
-  if (tool.value === "text") {
-    e.preventDefault();
-    focusInput();
-    return;
-  }
+  if (tool.value === "text" && !isFontReady.value) return;
   props.letter?.handlePointerDown(e);
 }
 function onPointerMove(e) {
   props.letter?.handlePointerMove(e);
+  isOverLetter.value = tool.value === "text" && !!props.letter?.cursorTarget;
 }
 function onPointerUp(e) {
   props.letter?.handlePointerUp(e);
@@ -226,7 +224,11 @@ onBeforeUnmount(() => {
     position: absolute;
     inset: 0;
     touch-action: none;
-    cursor: text;
+    cursor: default;
+
+    &.is-tool-text.is-over-letter {
+      cursor: none;
+    }
 
     &.is-tool-draw,
     &.is-tool-erase,
