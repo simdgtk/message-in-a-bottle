@@ -8,6 +8,8 @@ export class Debug {
   constructor({ scene }) {
     this.scene = scene;
     this.pane = new Pane({ title: "Debug" });
+    // Keep the pane above every overlay (letter zone, fades, toolbar…)
+    this.pane.element.parentElement.style.zIndex = "10000";
     this.defaultPreset = null;
 
     this.createDebug();
@@ -20,6 +22,7 @@ export class Debug {
     this.createOceanDebug();
     this.createLetterDebug();
     this.createCameraDebug();
+    this.createIslandDebug();
     this.createLetterViewDebug();
     this.createOutlineDebug();
   }
@@ -288,6 +291,12 @@ export class Debug {
       .addBinding(params, "cameraTarget", { label: "Île cible", ...point })
       .on("change", onChange);
     folder
+      .addBinding(params, "loginCameraPosition", { label: "Login position", ...point })
+      .on("change", onChange);
+    folder
+      .addBinding(params, "loginCameraTarget", { label: "Login cible", ...point })
+      .on("change", onChange);
+    folder
       .addBinding(params, "barrelCameraPosition", {
         label: "Lettre position",
         ...point,
@@ -296,6 +305,41 @@ export class Debug {
     folder
       .addBinding(params, "barrelCameraRotation", {
         label: "Lettre rotation (°)",
+        ...angle,
+      })
+      .on("change", onChange);
+    folder.addBinding(params, "parallaxStrength", {
+      label: "Parallaxe force",
+      min: 0,
+      max: 10,
+      step: 0.1,
+    });
+    folder.addBinding(params, "parallaxSmoothing", {
+      label: "Parallaxe douceur",
+      min: 0.5,
+      max: 10,
+      step: 0.1,
+    });
+  }
+
+  createIslandDebug() {
+    const params = this.scene.params;
+    if (!params) return;
+
+    const folder = this.pane.addFolder({ title: "Île", expanded: false });
+    const onChange = () => this.scene.refreshView();
+    const angle = {
+      x: { min: -180, max: 180, step: 1 },
+      y: { min: -180, max: 180, step: 1 },
+      z: { min: -180, max: 180, step: 1 },
+    };
+
+    folder
+      .addBinding(params, "islandRotation", { label: "Rotation (°)", ...angle })
+      .on("change", onChange);
+    folder
+      .addBinding(params, "loginIslandRotation", {
+        label: "Login rotation (°)",
         ...angle,
       })
       .on("change", onChange);

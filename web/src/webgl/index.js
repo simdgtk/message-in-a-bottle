@@ -5,5 +5,4 @@ export * from "@/webgl/materials/OceanMaterial.js";
 export * from "@/webgl/objects/ShaderCube.js";
 export * from "@/webgl/objects/OceanFloor.js";
 export * from "@/webgl/objects/Model.js";
-export * from "@/webgl/scenes/LoginSceneApp.js";
 export * from "@/webgl/scenes/SceneApp.js";

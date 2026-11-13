@@ -1,6 +1,5 @@
 <template>
   <div ref="overlayRef" class="letter-overlay">
-
     <div
       class="letter-zone"
       :class="`is-tool-${tool}`"
@@ -16,7 +15,14 @@
       @pointerdown.stop
       @click="backToIsland"
     >
-      retour à l'île
+      <img
+        v-for="state in 2"
+        :key="state"
+        :class="`state state-${state}`"
+        :src="`/images/back-arrow${state}.webp`"
+        alt=""
+        draggable="false"
+      />
     </button>
 
     <div class="toolbar" @pointerdown.stop>
@@ -33,13 +39,34 @@
         <img
           v-for="state in 3"
           :key="state"
-          :class="`tool__state tool__state--${state}`"
+          :class="`state state-${state}`"
           :src="`/images/toolbar/${item.icon}${state}.webp`"
           alt=""
           draggable="false"
         />
       </button>
     </div>
+
+    <p v-if="sendError" class="send-error">{{ sendError }}</p>
+
+    <button
+      type="button"
+      class="write-button"
+      :class="{ 'is-sending': isSending }"
+      aria-label="Envoyer la bouteille"
+      :disabled="isSending"
+      @pointerdown.stop
+      @click="send"
+    >
+      <img
+        v-for="state in 2"
+        :key="state"
+        :class="`state state-${state}`"
+        :src="`/images/send${state}.webp`"
+        alt=""
+        draggable="false"
+      />
+    </button>
 
     <input
       ref="imageInputRef"
@@ -55,12 +82,43 @@
 
 <script setup>
 import { ref, onMounted, onBeforeUnmount } from "vue";
+import { sendBottle } from "@/utils/bottle";
 
 const props = defineProps({
   letter: Object,
 });
 
 const emit = defineEmits(["back"]);
+
+const isSending = ref(false);
+const sendError = ref("");
+
+async function send() {
+  const letter = props.letter;
+  if (!letter || isSending.value) return;
+
+  if (letter.isEmpty()) {
+    sendError.value = "La lettre est vide";
+    return;
+  }
+
+  isSending.value = true;
+  sendError.value = "";
+
+  try {
+    await sendBottle(letter.exportImage());
+    letter.clear();
+    emit("back");
+  } catch (error) {
+    console.warn(error);
+    sendError.value =
+      error.message === "NO_RECIPIENT"
+        ? "Personne d'autre n'est encore dans l'océan :("
+        : "La bouteille n'a pas pu partir";
+  } finally {
+    isSending.value = false;
+  }
+}
 
 const overlayRef = ref(null);
 const imageInputRef = ref(null);
@@ -178,10 +236,84 @@ onBeforeUnmount(() => {
   }
 
   .back-island {
+    all: unset;
     position: absolute;
     z-index: 1;
     top: 30px;
     left: 30px;
+    width: 96px;
+    height: 56px;
+    cursor: pointer;
+
+    .state {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%) scale(0.26);
+      max-width: none;
+      pointer-events: none;
+      user-select: none;
+    }
+
+    .state-2 {
+      opacity: 0;
+    }
+
+    &:hover {
+      .state-1 {
+        opacity: 1;
+      }
+      .state-2 {
+        opacity: 0.5;
+      }
+    }
+  }
+
+  .write-button {
+    all: unset;
+    position: absolute;
+    z-index: 1;
+    right: 30px;
+    bottom: 30px;
+    width: 110px;
+    height: 110px;
+    cursor: pointer;
+    
+    .state {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      user-select: none;
+    }
+    
+    .state-2 {
+      opacity: 0;
+      transition: opacity 0.2s ease;
+    }
+
+    &:hover {
+      .state-2 {
+        opacity: 1;
+      }
+    }
+
+    &.is-sending {
+      cursor: wait;
+      opacity: 0.5;
+    }
+  }
+
+  .send-error {
+    position: absolute;
+    z-index: 1;
+    right: 30px;
+    bottom: 150px;
+    margin: 0;
+    color: #fff;
+    font-size: 24px;
+    font-weight: 500;
   }
 
   .toolbar {
@@ -205,39 +337,39 @@ onBeforeUnmount(() => {
     width: 80px;
     height: 80px;
     cursor: pointer;
-  }
 
-  .tool__state {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%) scale(0.32);
-    max-width: none;
-    pointer-events: none;
-    user-select: none;
-    opacity: 0;
-    transition: opacity 0.2s ease;
-  }
-
-  .tool__state--1 {
-    opacity: 1;
-  }
-
-  .tool:hover:not(.is-active) {
-    .tool__state--1 {
+    .state {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%) scale(0.32);
+      max-width: none;
+      pointer-events: none;
+      user-select: none;
       opacity: 0;
+      transition: opacity 0.2s ease;
     }
-    .tool__state--2 {
+
+    .state-1 {
       opacity: 1;
     }
-  }
 
-  .tool.is-active {
-    .tool__state--1 {
-      opacity: 0;
+    &:hover:not(.is-active) {
+      .state-1 {
+        opacity: 0;
+      }
+      .state-2 {
+        opacity: 1;
+      }
     }
-    .tool__state--3 {
-      opacity: 1;
+
+    &.is-active {
+      .state-1 {
+        opacity: 0;
+      }
+      .state-3 {
+        opacity: 1;
+      }
     }
   }
 

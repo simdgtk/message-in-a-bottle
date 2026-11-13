@@ -70,25 +70,22 @@ export class Letter {
     this.photoCtx = this.photoCanvas.getContext("2d");
 
     this.background = null;
+    this.receivedImage = null;
     this.paperColor = options.paperColor || "#f4ecdc";
 
     this.texture = new THREE.CanvasTexture(this.canvas);
     this.texture.colorSpace = THREE.SRGBColorSpace;
     this.texture.flipY = false;
 
-    // Tout ce qui est posé sur la lettre, dans l'ordre : render() le rejoue tel quel.
-    //   { tool: "text", content }            bloc de texte (un par passage sur l'outil plume)
-    //   { tool: "draw", path, color }        trait de pinceau
-    //   { tool: "erase", path }              coup de gomme (n'efface que ce qui est avant lui)
-    //   { tool: "photo", img, x, y, w, h }   image (dessinée sur photoCanvas, jamais gommée)
     this.history = [];
-    this.activeText = null; // bloc de texte en cours, ajouté à history au 1er caractère
-    this.textarea = null; // textarea cachée du bloc en cours
-    this.textContainer = null; // élément DOM où créer la textarea (fourni par l'overlay)
+    this.activeText = null;
+    this.textarea = null;
+    this.textContainer = null;
     this.points = [];
     this.tool = "text";
     this.toolBeforePhoto = "text";
     this.onToolChange = null;
+    this.onSound = null;
     this.drawingMode = false;
     this.erasingMode = false;
 
@@ -105,6 +102,11 @@ export class Letter {
     this.imageMargin = 100;
 
     this.inLetterMode = false;
+    this.isDirty = true;
+
+    this.tapeImage.onload = () => {
+      this.isDirty = true;
+    };
 
     // if (typeof document !== "undefined" && document.fonts?.ready) {
     //   document.fonts.ready.then(() => {
@@ -125,6 +127,7 @@ export class Letter {
       this.img = img;
       this.setTool("photo");
       this.imageAddingMode = true;
+      this.isDirty = true;
     };
     img.onerror = () => console.warn("Img pas chargée");
     img.src = src;
@@ -136,6 +139,7 @@ export class Letter {
     this.ghostPos = null;
     this.ghostRotation = null;
     this.imageAddingMode = false;
+    this.isDirty = true;
     if (this.tool === "photo") this.setTool(this.toolBeforePhoto ?? "text");
   }
 
@@ -153,26 +157,16 @@ export class Letter {
       this.secondCanvas.height = this.photoCanvas.height = this.canvas.height;
     }
 
+    this.isDirty = true;
     // this.render();
   }
 
   setBackground(image) {
     this.background = image ?? null;
+    this.isDirty = true;
     // this.render();
   }
 
-  setContentUV({ uMin, uMax, vMin, vMax }) {
-    this.contentRect = {
-      x: uMin * this.width,
-      y: (1 - vMax) * this.height,
-      w: (uMax - uMin) * this.width,
-      h: (vMax - vMin) * this.height,
-    };
-    // this.render();
-  }
-
-  // Nouveau bloc de texte : nouvelle textarea vide. Le bloc n'entre dans history
-  // qu'au premier caractère, pour ne pas empiler de blocs vides.
   startTextBlock() {
     this.removeTextarea();
     this.activeText = { tool: "text", content: "" };
@@ -180,8 +174,6 @@ export class Letter {
     const textarea = document.createElement("textarea");
     textarea.className = "letter-input";
     textarea.setAttribute("aria-label", "Texte de la lettre");
-    // Invisible : le texte est rendu dans le canvas. Styles en ligne car créée hors du
-    // template Vue (le CSS scoped de l'overlay ne s'y applique pas)
     Object.assign(textarea.style, {
       position: "absolute",
       top: "0",
@@ -193,7 +185,6 @@ export class Letter {
       resize: "none",
     });
     textarea.addEventListener("input", () => this.onTextareaInput());
-    // Pas de suppression : on rature à la gomme
     textarea.addEventListener("keydown", (e) => {
       if (e.key === "Backspace" || e.key === "Delete") e.preventDefault();
     });
@@ -208,6 +199,7 @@ export class Letter {
     if (!block) return;
     block.content = this.textarea.value;
     if (!this.history.includes(block)) this.history.push(block);
+    this.isDirty = true;
   }
 
   removeTextarea() {
@@ -218,7 +210,6 @@ export class Letter {
   setTool(tool) {
     if (!TOOLS.includes(tool)) return this.tool;
     if (tool === this.tool) {
-      // Re-clic sur la plume : nouveau bloc, sauf si le bloc en cours est encore vide
       if (tool === "text" && this.activeText?.content) {
         this.startTextBlock();
         this.focusInput();
@@ -232,12 +223,14 @@ export class Letter {
       this.ghostPos = null;
       this.ghostRotation = null;
       this.imageAddingMode = false;
+      this.isDirty = true;
     }
     if (tool === "photo") this.toolBeforePhoto = this.tool;
 
     this.tool = tool;
     this.drawingMode = tool === "draw" || tool === "erase";
     this.erasingMode = tool === "erase";
+    if (this.points.length > 0) this.isDirty = true;
     this.points = [];
     if (tool === "text") {
       this.startTextBlock();
@@ -256,19 +249,19 @@ export class Letter {
     }
   }
 
-  // Annule la dernière action (bloc de texte, trait, gomme ou photo)
   back() {
     const last = this.history.pop();
-    // Bloc en cours annulé : on vide sa textarea, il reviendra au prochain caractère
     if (last && last === this.activeText) {
       last.content = "";
       if (this.textarea) this.textarea.value = "";
     }
+    this.isDirty = true;
   }
 
   clear() {
     this.history = [];
     this.points = [];
+    this.isDirty = true;
     if (this.tool === "text") this.startTextBlock();
   }
 
@@ -298,6 +291,7 @@ export class Letter {
       const { x, y } = this.ghostPos ?? coords;
       this.history.push({ tool: "photo", img: this.img, x, y, ...this.ghostSize });
       this.cancelImage();
+      this.isDirty = true;
       return;
     }
 
@@ -307,7 +301,8 @@ export class Letter {
       } catch {}
     }
     this.points = [[coords.x, coords.y, coords.pressure]];
-    // this.render();
+    this.isDirty = true;
+    if (this.erasingMode) this.onSound?.("eraserRub");
   }
 
   clampToLetter(coords) {
@@ -323,20 +318,26 @@ export class Letter {
 
   handlePointerMove(e) {
     if (this.imageAddingMode) {
-      this.ghostTarget = this.clampToLetter(this.getPointerCoords(e));
-      if (this.ghostTarget && !this.ghostPos)
+      const coords = this.getPointerCoords(e);
+      if (!coords) return;
+      this.ghostTarget = this.clampToLetter(coords);
+      if (this.ghostTarget && !this.ghostPos) {
         this.ghostPos = { ...this.ghostTarget };
+        this.isDirty = true;
+      }
       return;
     }
     if (!this.drawingMode || e.buttons !== 1) return;
     const coords = this.getPointerCoords(e);
     if (!coords) return;
     this.points.push([coords.x, coords.y, coords.pressure]);
+    this.isDirty = true;
     // this.render();
   }
 
   handlePointerUp() {
     if (!this.drawingMode) return;
+    if (this.erasingMode) this.onSound?.("eraserRub", "stop");
     if (this.points.length > 0) {
       const options = this.erasingMode
         ? this.erasingOptions
@@ -352,6 +353,7 @@ export class Letter {
         );
       }
       this.points = [];
+      this.isDirty = true;
       // this.render();
     }
   }
@@ -383,8 +385,6 @@ export class Letter {
     return lines;
   }
 
-  // Met en page le texte de tous les blocs mis bout à bout.
-  // ranges : Map(bloc -> [début, fin[) dans ce texte complet
   layoutText(ctx) {
     ctx.font = `${this.fontSize}px ${this.fontFamily}`;
     ctx.textBaseline = "top";
@@ -407,7 +407,6 @@ export class Letter {
     };
   }
 
-  // Dessine uniquement les caractères du bloc, à leur place dans la mise en page complète
   drawTextRange(ctx, { ranges, lines, x0, y0 }, entry) {
     const range = ranges.get(entry);
     if (!range) return;
@@ -427,21 +426,31 @@ export class Letter {
     if (!this.inLetterMode) return;
 
     if (this.imageAddingMode && this.ghostPos && this.ghostTarget) {
-      this.ghostPos.x = damp(
+      const nextX = damp(
         this.ghostPos.x,
         this.ghostTarget.x,
         this.dampingFactor,
         deltaMs,
       );
-      this.ghostPos.y = damp(
+      const nextY = damp(
         this.ghostPos.y,
         this.ghostTarget.y,
         this.dampingFactor,
         deltaMs,
       );
+      if (
+        Math.abs(nextX - this.ghostPos.x) > 0.05 ||
+        Math.abs(nextY - this.ghostPos.y) > 0.05
+      ) {
+        this.ghostPos.x = nextX;
+        this.ghostPos.y = nextY;
+        this.isDirty = true;
+      }
     }
 
-    this.render();
+    if (this.isDirty) {
+      this.render();
+    }
   }
 
   drawPhoto(ctx, img, x, y, w, h) {
@@ -562,20 +571,55 @@ export class Letter {
     out.save();
     out.translate(0, h);
     out.scale(1, -1);
-    out.drawImage(this.inkCanvas, 0, 0);
-    out.drawImage(this.photoCanvas, 0, 0);
+    if (this.receivedImage) {
+      out.drawImage(this.receivedImage, 0, 0, w, h);
+    } else {
+      out.drawImage(this.inkCanvas, 0, 0);
+      out.drawImage(this.photoCanvas, 0, 0);
+    }
     out.restore();
 
     this.texture.needsUpdate = true;
+    this.isDirty = false;
   }
 
   toDataURL(type = "image/png") {
     return this.canvas?.toDataURL(type);
   }
 
-  toBase64(type = "image/png", quality) {
-    const dataURL = this.canvas?.toDataURL(type, quality);
-    return dataURL ? dataURL.split(",")[1] : null;
+  exportImage({ size = 1024, type = "image/webp", quality = 0.8 } = {}) {
+    if (!this.inkCanvas || !this.photoCanvas) return null;
+    if (this.imageAddingMode) this.cancelImage();
+    this.render();
+
+    const out = document.createElement("canvas");
+    out.width = size;
+    out.height = Math.round(size * (this.height / this.width));
+
+    const ctx = out.getContext("2d");
+    ctx.drawImage(this.inkCanvas, 0, 0, out.width, out.height);
+    ctx.drawImage(this.photoCanvas, 0, 0, out.width, out.height);
+
+    return out.toDataURL(type, quality);
+  }
+
+  async showReceived(src) {
+    if (!src) {
+      this.receivedImage = null;
+      this.isDirty = true;
+      return;
+    }
+    const image = new Image();
+    image.src = src;
+    await image.decode();
+    this.receivedImage = image;
+    this.isDirty = true;
+  }
+
+  isEmpty() {
+    return !this.history.some(
+      (entry) => entry.tool !== "text" || entry.content.trim() !== "",
+    );
   }
 
   destroy() {

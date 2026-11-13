@@ -1,14 +1,14 @@
 // Composables
 import { createRouter, createWebHistory } from "vue-router";
 
-const SKIP_AUTH = true;
+const SKIP_AUTH = false;
 
 const routes = [
   {
     path: "/",
     ...(SKIP_AUTH
       ? { redirect: "/island" }
-      : { component: () => import("@/views/Transfer.vue") }),
+      : { component: () => import("@/views/Island.vue") }),
   },
   {
     path: "/island",

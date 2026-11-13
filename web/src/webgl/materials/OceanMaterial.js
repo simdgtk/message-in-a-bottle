@@ -74,7 +74,6 @@ const OCTAVE_M = mat2(vec2(1.6, 1.2), vec2(-1.2, 1.6));
 const ITER_GEOMETRY = 3;
 const ITER_FRAGMENT = 5;
 
-// height of the waves at p (waves = { height, choppy, speed, freq } uniforms)
 const seaHeight = Fn(({ p, time, waves, iterations }) => {
   const freq = waves.freq.toVar();
   const amp = waves.height.toVar();
@@ -96,7 +95,6 @@ const seaHeight = Fn(({ p, time, waves, iterations }) => {
   return h;
 });
 
-// signed distance to the sea surface (used for the normals)
 const map_detailed = (p, time, waves) =>
   p.y.sub(seaHeight({ p, time, waves, iterations: ITER_FRAGMENT }));
 
@@ -162,7 +160,6 @@ export class OceanMaterial extends MeshBasicNodeMaterial {
     // const pos = positionLocal;
     // const displacement = sin(add(mul(pos.x, 4.0), time)).mul(2);
 
-    // world position of the vertex before displacement
     const worldPos = modelWorldMatrix.mul(vec4(positionGeometry, 1)).xyz;
     const waveHeight = seaHeight({
       p: worldPos,

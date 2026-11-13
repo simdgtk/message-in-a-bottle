@@ -1,11 +1,11 @@
 <template>
   <section class="transfer">
-    <div class="transfer__container">
+    <div class="container">
       <h1>Hello {{ name }}</h1>
       <button type="button">Envoyer un message</button>
-      <div class="transfer__users">
+      <div class="users">
         <h2>List of users</h2>
-        <table class="transfer__table">
+        <table class="table">
           <thead>
             <tr>
               <th>Name</th>
@@ -25,7 +25,7 @@
 </template>
 
 <script>
-import axios from "axios";
+import { api } from "@/utils/api";
 import { router } from "@/router/index";
 
 export default {
@@ -45,8 +45,8 @@ export default {
   methods: {
     fetchAllUsers: function () {
       let token = localStorage.getItem("user_token");
-      axios
-        .get("http://localhost:4000/users", {
+      api
+        .get("/users", {
           headers: { Authorization: `Bearer ${token}` },
         })
         .then((resp) => {
@@ -61,8 +61,8 @@ export default {
 
     fetchMe: function () {
       let token = localStorage.getItem("user_token");
-      axios
-        .get("http://localhost:4000/me", {
+      api
+        .get("/me", {
           headers: { Authorization: `Bearer ${token}` },
         })
         .then((resp) => {
@@ -95,7 +95,7 @@ export default {
     padding: 3rem;
   }
 
-  &__container {
+  .container {
     display: flex;
     flex-direction: column;
     gap: 2rem;
@@ -104,7 +104,7 @@ export default {
     padding: 2rem;
   }
 
-  &__users {
+  .users {
     padding-top: 1.5rem;
 
     h2 {
@@ -112,7 +112,7 @@ export default {
     }
   }
 
-  &__table {
+  .table {
     width: 100%;
 
     th,

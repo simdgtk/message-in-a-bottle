@@ -11,8 +11,6 @@ Require a payload of the form :
 
 If the credentials are valid, it responds with 200 OK, returning a JWT token in the response body which is valid for 60 minutes.
 
-If the username does not exist, it responds with 404 Not Found (the client can then offer to create the account with POST /user). If the password is wrong, it responds with 401 Unauthorized.
-
 ## Create User
 Post **/user**
 
@@ -31,7 +29,6 @@ If successful, return:
 ```
 {
   "username": "isabelle",
-  "password": "",
   "channels": [
     {
       "name": "general",

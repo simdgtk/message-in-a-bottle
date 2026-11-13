@@ -1,162 +1,220 @@
 <template>
-  <Scene />
-  <section class="login">
-    <div class="login__modal">
-      <h1>Sign in or create an account</h1>
-      <form class="login__form" action="#" @submit.prevent="onSubmit">
-        <div class="login__field">
-          <label for="username">Your username</label>
-          <input
-            type="text"
-            name="username"
-            id="username"
-            v-model="username"
-            @input="needsSignup = false"
-            placeholder="Your username"
-            required=""
-          />
-        </div>
-        <div class="login__field">
-          <label for="password">Password</label>
-          <input
-            type="password"
-            name="password"
-            id="password"
-            v-model="password"
-            placeholder="••••••••"
-            required=""
-          />
-        </div>
-        <div class="login__row">
-          <div class="login__remember">
-            <input id="remember" aria-describedby="remember" type="checkbox" />
-            <label for="remember">Remember me</label>
-          </div>
-          <a href="#">Forgot password?</a>
-        </div>
-        <p v-if="error">{{ error }}</p>
-        <template v-if="needsSignup">
-          <p>No account named “{{ username }}”. Create it with this password?</p>
-          <button type="button" :disabled="loading" @click="onSignup">
-            Sign up
-          </button>
-        </template>
-        <button v-else type="submit" :disabled="loading">Continue</button>
+  <section class="login" ref="loginRef">
+    <div class="board">
+      <form class="paper" @submit.prevent="onSubmit">
+        <input
+          class="field username"
+          type="text"
+          name="username"
+          id="username"
+          v-model="username"
+          @input="error = ''"
+          placeholder="Username"
+          autocomplete="username"
+          required
+        />
+        <input
+          class="field password"
+          type="password"
+          name="password"
+          id="password"
+          v-model="password"
+          placeholder="Password"
+          autocomplete="current-password"
+          required
+        />
+
+        <p v-if="error" class="error" role="alert">{{ error }}</p>
+
+        <button class="button submit-login" type="submit" :disabled="loading">
+          Log in
+        </button>
+
+        <button
+          class="button submit-signup"
+          type="button"
+          :disabled="loading"
+          @click="onSignup"
+        >
+          Create an account
+        </button>
       </form>
     </div>
   </section>
 </template>
 
-<script>
-import axios from "axios";
-import Scene from "@/components/Scene.vue";
+<script setup>
+import { ref } from "vue";
+import { api } from "@/utils/api";
 import { router } from "@/router/index";
+import { fadeThrough } from "@/composables/useFade";
 
-const API_URL = "http://localhost:4000";
+const username = ref("");
+const password = ref("");
+const loading = ref(false);
+const error = ref("");
 
-export default {
-  components: { Scene },
-  data() {
-    return {
-      username: "",
-      password: "",
-      loading: false,
-      error: "",
-      needsSignup: false,
-    };
-  },
-  methods: {
-    login() {
-      return axios
-        .post(`${API_URL}/login`, {
-          username: this.username,
-          password: this.password,
-        })
-        .then((response) => {
-          localStorage.setItem("user_token", response.data);
-          router.push("/");
-        });
-    },
+const loginRef = ref(null);
 
-    onSubmit() {
-      this.loading = true;
-      this.error = "";
+async function login() {
+  const response = await api.post("/login", {
+    username: username.value,
+    password: password.value,
+  });
+  localStorage.setItem("user_token", response.data);
+  await fadeThrough(() => router.push("/island"));
+}
 
-      this.login()
-        .catch((error) => {
-          const status = error.response?.status;
-          if (status === 404) {
-            this.needsSignup = true;
-          } else if (status === 401) {
-            this.error = "Wrong password";
-          } else {
-            this.error = "Internal Server Error";
-          }
-        })
-        .finally(() => {
-          this.loading = false;
-        });
-    },
+async function onSubmit() {
+  loading.value = true;
+  error.value = "";
 
-    onSignup() {
-      this.loading = true;
-      this.error = "";
+  try {
+    await login();
+  } catch (err) {
+    const status = err.response?.status;
+    if (status === 404) {
+      error.value = "Aucun compte avec ce nom, créez-en un ci-dessous";
+    } else if (status === 401) {
+      error.value = "Mauvais mot de passe";
+    } else {
+      error.value = "Erreur serveur";
+    }
+  } finally {
+    loading.value = false;
+  }
+}
 
-      axios
-        .post(`${API_URL}/user`, {
-          username: this.username,
-          password: this.password,
-        })
-        .then(() => this.login())
-        .catch(() => {
-          this.error = "Could not create the account";
-        })
-        .finally(() => {
-          this.loading = false;
-        });
-    },
-  },
-};
+async function onSignup() {
+  if (!username.value || !password.value) {
+    error.value = "Remplissez un nom d'utilisateur et un mot de passe";
+    return;
+  }
+  loading.value = true;
+  error.value = "";
+
+  try {
+    await api.post("/user", {
+      username: username.value,
+      password: password.value,
+    });
+    await login();
+  } catch {
+    error.value = "Impossible de créer le compte";
+  } finally {
+    loading.value = false;
+  }
+}
 </script>
 
 <style lang="scss" scoped>
 .login {
-  position: relative;
+  position: fixed;
+  inset: 0;
   display: flex;
   align-items: center;
-  justify-content: center;
-  min-height: 100vh;
-  padding: 2rem 1.5rem;
+  justify-content: flex-start;
+  padding-left: 7vw;
+  pointer-events: none;
 
-  &__modal {
-    width: 100%;
-    max-width: 28rem;
-    padding: 3rem;
+  @media (max-width: 768px) {
+    justify-content: center;
+    padding-left: 0;
   }
 
-  &__form {
-    display: flex;
-    flex-direction: column;
-    gap: 1.5rem;
-    margin-top: 1.5rem;
-  }
-
-  &__field {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-  }
-
-  &__row {
+  .board {
+    pointer-events: auto;
+    width: min(30rem, 90vw);
+    aspect-ratio: 1031 / 1250;
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    justify-content: center;
+    background: url("/images/login/wood_background.webp") center / 100% 100%;
   }
 
-  &__remember {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
+  .paper {
+    position: relative;
+    width: 95%;
+    aspect-ratio: 957 / 1179;
+    background: url("/images/login/paper.webp") center / 100% 100% no-repeat;
+  }
+
+  .field,
+  .button,
+  .error {
+    position: absolute;
+    left: 50%;
+    translate: -50% 0;
+    font-family: var(--font-primary);
+    font-size: 20px;
+  }
+
+  .field {
+    top: 20%;
+    width: 75%;
+    aspect-ratio: 737 / 148;
+    padding: 24px;
+    border: none;
+    outline: none;
+    background: url("/images/login/frame.webp") center / 100% 100% no-repeat;
+    color: #5a2a24;
+    font-size: 20px;
+
+    &::placeholder {
+      color: rgba(90, 42, 36, 0.45);
+    }
+
+    &.password {
+      top: 40%;
+    }
+  }
+
+  .error {
+    top: 55%;
+    width: 80%;
+    margin: 0;
+    text-align: center;
+    color: #a8433a;
+    font-size: 20px;
+  }
+
+  .button {
+    border: none;
+    background: center / 100% 100% no-repeat;
+    color: #fdebc8;
+    font-size: 20px;
+    cursor: pointer;
+    transition:
+      scale 0.15s ease,
+      filter 0.15s ease;
+
+    &:hover:not(:disabled) {
+      scale: 1.05;
+      filter: brightness(1.1);
+    }
+
+    &:active:not(:disabled) {
+      scale: 0.95;
+    }
+
+    &:disabled {
+      cursor: default;
+      opacity: 0.6;
+    }
+
+    &.submit-login {
+      top: 64%;
+      width: 36%;
+      aspect-ratio: 341 / 98;
+      background-image: url("/images/login/login_button.webp");
+    }
+
+    &.submit-signup {
+      top: 80%;
+      width: 60%;
+      aspect-ratio: 541 / 104;
+      background-image: url("/images/login/signin_button.webp");
+    }
   }
 }
 </style>

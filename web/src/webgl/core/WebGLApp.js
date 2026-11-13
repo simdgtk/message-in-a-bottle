@@ -1,12 +1,14 @@
 import * as THREE from "three/webgpu";
 import { Viewport } from "./Viewport.js";
-import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { Inspector } from "three/examples/jsm/inspector/Inspector.js";
 
 export class WebGLApp {
-  constructor({ container, antialias = true, alpha = false, controls = true } = {}) {
+  constructor({
+    container,
+    antialias = true,
+    alpha = false,
+  } = {}) {
     this.container = container;
-    this.hasControls = controls;
     this.viewport = new Viewport({
       container: this.container,
       onResize: () => this.resize(),
@@ -16,7 +18,7 @@ export class WebGLApp {
       50,
       this.viewport.aspectRatio,
       0.1,
-      1000
+      1000,
     );
 
     this.renderer = new THREE.WebGPURenderer({
@@ -31,12 +33,6 @@ export class WebGLApp {
 
     this.inspector = new Inspector();
     this.renderer.inspector = this.inspector;
-
-    this.controls = null;
-    if (this.hasControls) {
-      this.controls = new OrbitControls(this.camera, this.renderer.domElement);
-      this.controls.enableDamping = true;
-    }
 
     this.timer = new THREE.Timer();
     this.timer.connect(document);
@@ -57,11 +53,9 @@ export class WebGLApp {
     this.play();
   }
 
-  async load() {
-  }
+  async load() {}
 
-  start() {
-  }
+  start() {}
 
   play() {
     if (this.isRunning) return;
@@ -81,16 +75,11 @@ export class WebGLApp {
     const elapsed = this.timer.getElapsed();
     const delta = this.timer.getDelta();
 
-    if (this.controls?.enabled) {
-      this.controls.update();
-    }
-
     this.update({ timeMs, elapsed, delta });
     this.render();
   }
 
-  update({ timeMs, elapsed, delta }) {
-  }
+  update({ timeMs, elapsed, delta }) {}
 
   render() {
     this.renderer.render(this.scene, this.camera);
@@ -106,11 +95,6 @@ export class WebGLApp {
   destroy() {
     this.isDestroyed = true;
     this.stop();
-
-    if (this.controls) {
-      this.controls.dispose();
-      this.controls = null;
-    }
 
     if (this.timer) {
       this.timer.dispose();
@@ -130,7 +114,9 @@ export class WebGLApp {
 
     if (this.renderer) {
       if (this.renderer.domElement && this.renderer.domElement.parentElement) {
-        this.renderer.domElement.parentElement.removeChild(this.renderer.domElement);
+        this.renderer.domElement.parentElement.removeChild(
+          this.renderer.domElement,
+        );
       }
       this.renderer.dispose();
       this.renderer = null;
@@ -141,4 +127,3 @@ export class WebGLApp {
     this.container = null;
   }
 }
-

@@ -1,91 +1,110 @@
 <template>
   <div class="island-page">
-    <div ref="container" class="canvas-3d"></div>
+    <button
+      v-if="!isWriting && !readingBottle"
+      type="button"
+      class="logout-button"
+      @click="logout"
+    >
+      Log out
+    </button>
     <LetterOverlay
       v-if="isWriting"
       :letter="app?.letterWriting"
       @back="leaveLetterMode"
     />
-    <div ref="fade" class="fade"></div>
+    <ReadOverlay v-if="readingBottle" @back="leaveReadMode" />
   </div>
 </template>
 
 <script setup>
-import { ref, shallowRef, onMounted, onBeforeUnmount, nextTick } from "vue";
-import gsap from "gsap";
-import { SceneApp } from "@/webgl";
+import { ref, watch, onMounted, onBeforeUnmount } from "vue";
+import { router } from "@/router/index";
+import { inbox, startBottles, stopBottles } from "@/composables/useBottles";
+import { sceneApp as app } from "@/composables/useSceneApp";
+import { fadeThrough } from "@/composables/useFade";
 import LetterOverlay from "@/views/LetterOverlay.vue";
+import ReadOverlay from "@/views/ReadOverlay.vue";
 
 const isWriting = ref(false);
-const container = ref(null);
-const fade = ref(null);
-let isTransitioning = false;
-const app = shallowRef(null);
+const readingBottle = ref(null);
 
-onMounted(async () => {
-  const sceneApp = new SceneApp({ container: container.value });
-  app.value = sceneApp;
+watch(
+  app,
+  (sceneApp) => {
+    if (!sceneApp) return;
+    sceneApp.onBarrelClick = () => {
+      fadeThrough(() => {
+        sceneApp.enterLetter();
+        isWriting.value = true;
+      });
+    };
+    sceneApp.onBottleClick = openBottle;
+  },
+  { immediate: true },
+);
 
-  sceneApp.onBarrelClick = () => {
-    transition(() => {
-      sceneApp.enterLetter();
-      isWriting.value = true;
-    });
-  };
+watch(
+  [app, () => inbox.value.length],
+  ([sceneApp, count]) => sceneApp?.setBottleAvailable(count > 0),
+  { immediate: true },
+);
 
-  await sceneApp.init();
+onMounted(() => {
+  startBottles().catch((error) => console.warn(error));
 });
 
 onBeforeUnmount(() => {
-  gsap.killTweensOf(fade.value);
-  app.value?.destroy();
-  app.value = null;
+  stopBottles();
+  if (!app.value) return;
+  app.value.onBarrelClick = null;
+  app.value.onBottleClick = null;
+  app.value.setBottleAvailable(false);
 });
 
-async function transition(changeMode) {
-  if (isTransitioning) return;
-  isTransitioning = true;
-  await gsap.to(fade.value, { autoAlpha: 1, duration: 0.6, ease: "sine.inOut" });
-  changeMode();
-  await nextTick();
-  await gsap.to(fade.value, {
-    autoAlpha: 0,
-    duration: 0.8,
-    ease: "sine.inOut",
+function openBottle() {
+  const bottle = inbox.value[0];
+  if (!bottle || !app.value) return;
+
+  fadeThrough(async () => {
+    await app.value.letterWriting.showReceived(bottle.image);
+    app.value.enterLetter();
+    readingBottle.value = bottle;
   });
-  isTransitioning = false;
+}
+
+function leaveReadMode() {
+  fadeThrough(async () => {
+    readingBottle.value = null;
+    app.value?.leaveLetter();
+    await app.value?.letterWriting.showReceived(null);
+  });
 }
 
 function leaveLetterMode() {
-  transition(() => {
+  fadeThrough(() => {
     isWriting.value = false;
     app.value?.leaveLetter();
+  });
+}
+
+function logout() {
+  fadeThrough(() => {
+    localStorage.removeItem("user_token");
+    return router.push("/login");
   });
 }
 </script>
 
 <style lang="scss" scoped>
-.island-page,
-.canvas-3d {
+
+.logout-button {
   position: fixed;
-  inset: 0;
-  width: 100vw;
-  height: 100vh;
-  overflow: hidden;
+  top: 30px;
+  left: 30px;
+  z-index: 5;
+  padding: 0.5rem 1rem;
+  cursor: pointer;
 }
 
-.fade {
-  position: fixed;
-  inset: 0;
-  z-index: 10;
-  background: #000;
-  opacity: 0;
-  visibility: hidden;
-}
-
-.canvas-3d :deep(canvas) {
-  display: block;
-  width: 100%;
-  height: 100%;
-}
 </style>
