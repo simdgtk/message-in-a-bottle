@@ -84,6 +84,7 @@
 import { ref, onMounted, onBeforeUnmount } from "vue";
 import { sendBottle, replyBottle } from "@/utils/bottle";
 import { removeBottle } from "@/composables/useBottles";
+import { sceneApp } from "@/composables/useSceneApp";
 
 const props = defineProps({
   letter: Object,
@@ -183,6 +184,7 @@ function onPointerUp(e) {
 }
 
 function backToIsland() {
+  sceneApp.value?.audioManager?.play("uiInteraction");
   emit("back");
 }
 

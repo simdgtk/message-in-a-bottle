@@ -1,7 +1,7 @@
 import * as THREE from "three/webgpu";
 import { mix, shadow, uniform, vec3, vec4 } from "three/tsl";
 
-export const shadowColor = uniform(new THREE.Color(0.45, 0.55, 0.65));
+export const shadowColor = uniform(new THREE.Color(0xb3c4d3));
 
 export function applyBaseShadow(root, light) {
   const tint = mix(shadowColor, vec3(1), shadow(light));

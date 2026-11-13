@@ -5,7 +5,7 @@ import { easeOutQuad } from "./easings.js";
 import { damp, clamp } from "./maths.js";
 
 const DEFAULT_DRAWING_OPTIONS = {
-  size: 10,
+  size: 15,
   thinning: 0.34,
   streamline: 0.16,
   smoothing: 0.35,
@@ -16,7 +16,7 @@ const DEFAULT_DRAWING_OPTIONS = {
 export const TOOLS = ["text", "draw", "erase", "photo"];
 
 const DEFAULT_ERASING_OPTIONS = {
-  size: 32,
+  size: 47,
   thinning: 0.5,
   streamline: 0.2,
   smoothing: 0.5,
@@ -27,7 +27,7 @@ const DEFAULT_ERASING_OPTIONS = {
 
 export class Letter {
   constructor(options = {}) {
-    this.fontSize = options.fontSize || 30;
+    this.fontSize = options.fontSize || 47;
     this.fontFamily = "'Cursive', cursive";
     this.fontColor = options.fontColor || "#533029";
     this.lineHeight = Math.round(this.fontSize * 1.2);

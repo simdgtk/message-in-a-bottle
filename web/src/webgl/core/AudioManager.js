@@ -8,6 +8,7 @@ const SFX = {
   bottleClick: { file: "bottle-click", volume: 0.7 },
   bottleSend: { file: "bottle-send", volume: 0.8 },
   eraserRub: { file: "eraser-rub", volume: 0.6, loop: true },
+  uiInteraction: { file: "ui-interaction", volume: 0.7 },
 };
 
 export class AudioManager {

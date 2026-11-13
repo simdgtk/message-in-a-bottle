@@ -37,9 +37,9 @@ const LOGIN_ISLAND_SCALE = 0.6;
 const LOGIN_ISLAND_ROTATION = new THREE.Vector3(0, 0, 0);
 const LOGIN_CAMERA_POS = new THREE.Vector3(0, 37.5, 0);
 const LOGIN_CAMERA_TARGET = new THREE.Vector3(150, 28, 20);
-const LETTER_CAMERA_POS = new THREE.Vector3(-2, 24, -1.8);
+const LETTER_CAMERA_POS = new THREE.Vector3(-13, 24, -1.8);
 const LETTER_CAMERA_ROTATION = new THREE.Vector3(-6, -8, 0);
-const LETTER_POS = new THREE.Vector3(-1, 22.8, -11);
+const LETTER_POS = new THREE.Vector3(-12.2, 22.8, -11);
 const LETTER_SCALE = 0.084;
 const DARK_BACKGROUND_POS = new THREE.Vector3(1.36, 19.98, -11.95);
 const DARK_BACKGROUND_OPACITY = 0.85;
@@ -170,7 +170,6 @@ export class SceneApp extends WebGLApp {
     this.scene.add(islandGroup);
     this.islandBasePosition.copy(islandGroup.position);
     this.islandBaseScale = islandGroup.scale.x;
-    this.params.islandScale = this.islandBaseScale;
 
     letterGroup.traverse((child) => {
       if (!child.isMesh) return;
@@ -269,8 +268,18 @@ export class SceneApp extends WebGLApp {
     const goal = this.isWriting ? 0 : 1;
     const smoothing = this.params.parallaxSmoothing;
     const dt = delta * 1000;
-    this.parallax.x = damp(this.parallax.x, this.parallaxPointer.x * goal, smoothing, dt);
-    this.parallax.y = damp(this.parallax.y, this.parallaxPointer.y * goal, smoothing, dt);
+    this.parallax.x = damp(
+      this.parallax.x,
+      this.parallaxPointer.x * goal,
+      smoothing,
+      dt,
+    );
+    this.parallax.y = damp(
+      this.parallax.y,
+      this.parallaxPointer.y * goal,
+      smoothing,
+      dt,
+    );
   }
 
   applyParallax() {
@@ -309,10 +318,8 @@ export class SceneApp extends WebGLApp {
     this.updateHover();
     this.updateParallax(delta);
 
-    const {
-      bottleFloatingSpeed: speed,
-      bottleFloatingAmplitude: amp,
-    } = this.params;
+    const { bottleFloatingSpeed: speed, bottleFloatingAmplitude: amp } =
+      this.params;
     for (const entry of this.bottles.values()) {
       const group = entry.model?.group;
       if (!group) continue;
@@ -347,8 +354,8 @@ export class SceneApp extends WebGLApp {
 
   start() {
     this.uFogColor = uniform(color(HORIZON));
-    this.uFogNear = uniform(80);
-    this.uFogFar = uniform(320);
+    this.uFogNear = uniform(283);
+    this.uFogFar = uniform(391);
 
     // const materialSky = new THREE.MeshBasicNodeMaterial();
     // materialSky.colorNode = mix(color(HORIZON), color(ZENITH), 0.4);
@@ -486,7 +493,9 @@ export class SceneApp extends WebGLApp {
 
       origin.set(x, box.max.y + 50, z);
       this.spawnRaycaster.set(origin, down);
-      if (this.spawnRaycaster.intersectObjects(containers, false).length === 0) {
+      if (
+        this.spawnRaycaster.intersectObjects(containers, false).length === 0
+      ) {
         continue;
       }
 
@@ -544,11 +553,16 @@ export class SceneApp extends WebGLApp {
         modelUrl: "/models/bottle.glb",
         scale: BOTTLE_SCALE,
         hover: {
-          label: bottleData.readOnly ? "Lire la réponse" : "Ouvrir la bouteille",
+          label: bottleData.readOnly
+            ? "Lire la réponse"
+            : "Ouvrir la bouteille",
         },
       });
       const group = await model.load(this.assetLoader);
-      if (this.isDestroyed || this.bottles.get(bottleData.name) !== placeholder) {
+      if (
+        this.isDestroyed ||
+        this.bottles.get(bottleData.name) !== placeholder
+      ) {
         model.destroy();
         continue;
       }

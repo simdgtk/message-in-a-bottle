@@ -4,7 +4,7 @@
       type="button"
       class="back-island"
       @pointerdown.stop
-      @click="emit('back')"
+      @click="backToIsland"
     >
       <img
         v-for="state in 2"
@@ -49,6 +49,8 @@
 </template>
 
 <script setup>
+import { sceneApp } from "@/composables/useSceneApp";
+
 defineProps({
   bottle: Object,
   activeIndex: {
@@ -58,6 +60,11 @@ defineProps({
 });
 
 const emit = defineEmits(["back", "reply", "switch"]);
+
+function backToIsland() {
+  sceneApp.value?.audioManager?.play("uiInteraction");
+  emit("back");
+}
 </script>
 
 <style scoped lang="scss">
@@ -122,19 +129,6 @@ const emit = defineEmits(["back", "reply", "switch"]);
       user-select: none;
       transition: transform 0.3s ease;
     }
-
-    // &:hover {
-    //   transform: translateX(-50%) scale(1.08);
-    // }
-
-    // &.is-down {
-    //   top: auto;
-    //   bottom: 24px;
-
-    //   .arrow {
-    //     transform: rotate(180deg);
-    //   }
-    // }
   }
 
   .reply-button {
