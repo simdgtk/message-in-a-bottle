@@ -31,8 +31,17 @@ export class WebGLApp {
     this.renderer.setSize(this.viewport.width, this.viewport.height);
     this.container.appendChild(this.renderer.domElement);
 
-    this.inspector = new Inspector();
-    this.renderer.inspector = this.inspector;
+    const urlSearchParams = new URLSearchParams(window.location.search);
+    this.isDebug =
+      urlSearchParams.has("debug") ||
+      window.location.hash.includes("debug") ||
+      import.meta.env.DEV;
+
+    this.inspector = null;
+    if (this.isDebug) {
+      this.inspector = new Inspector();
+      this.renderer.inspector = this.inspector;
+    }
 
     this.timer = new THREE.Timer();
     this.timer.connect(document);

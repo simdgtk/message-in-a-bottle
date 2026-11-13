@@ -433,13 +433,7 @@ export class SceneApp extends WebGLApp {
       this.camera,
     );
 
-    const urlSearchParams = new URLSearchParams(window.location.search);
-    const isDebug =
-      urlSearchParams.has("debug") ||
-      window.location.hash.includes("debug") ||
-      import.meta.env.DEV;
-
-    if (isDebug) {
+    if (this.isDebug) {
       this.debug = new Debug({ scene: this });
     }
 
