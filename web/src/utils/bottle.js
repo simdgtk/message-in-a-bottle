@@ -119,3 +119,20 @@ export async function sendBottle(image) {
 
   return { bottle, letter, recipientId };
 }
+
+export async function replyBottle(bottle, image) {
+  const { me, hub } = await setupBottleSession();
+
+  const reply = await postMessage(bottle.channelId, "reply", {
+    type: "reply",
+    image,
+  });
+
+  await postMessage(hub.id, "bottle-reply", {
+    type: "bottle-reply",
+    to: bottle.from,
+    bottle: bottle.name,
+  });
+
+  return { bottle, reply, recipientId: bottle.from, from: me.id };
+}

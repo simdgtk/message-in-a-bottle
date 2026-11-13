@@ -82,10 +82,12 @@
 
 <script setup>
 import { ref, onMounted, onBeforeUnmount } from "vue";
-import { sendBottle } from "@/utils/bottle";
+import { sendBottle, replyBottle } from "@/utils/bottle";
+import { removeBottle } from "@/composables/useBottles";
 
 const props = defineProps({
   letter: Object,
+  replyTo: Object,
 });
 
 const emit = defineEmits(["back"]);
@@ -106,7 +108,12 @@ async function send() {
   sendError.value = "";
 
   try {
-    await sendBottle(letter.exportImage());
+    if (props.replyTo) {
+      await replyBottle(props.replyTo, letter.exportImage());
+      removeBottle(props.replyTo.name);
+    } else {
+      await sendBottle(letter.exportImage());
+    }
     letter.clear();
     emit("back");
   } catch (error) {

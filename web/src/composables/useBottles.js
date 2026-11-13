@@ -17,35 +17,64 @@ let reconnectTimer = null;
 
 function isBottleForMe(item) {
   const data = appData(item);
-  return data?.type === "bottle" && data.to === session.me.id;
+  return (
+    (data?.type === "bottle" || data?.type === "bottle-reply") &&
+    data.to === session.me.id
+  );
 }
 
 async function receive(name) {
-  if (inbox.value.some((bottle) => bottle.name === name)) return;
-
   const { channel, messages } = await fetchBottle(name, session.me);
-  if (messages.some((message) => message.user_id === session.me.id)) return;
-
   const letter = messages.find((message) => appData(message)?.type === "letter");
   if (!letter) return;
 
-  inbox.value = [
-    ...inbox.value,
-    {
+  const reply = messages.find((message) => appData(message)?.type === "reply");
+
+  let entry = null;
+  if (reply) {
+    if (letter.user_id !== session.me.id) return;
+    entry = {
       name,
       channelId: channel.id,
       from: letter.user_id,
-      letter,
+      readOnly: true,
+      images: [appData(reply).image, appData(letter).image],
+      image: appData(reply).image,
+    };
+  } else {
+    if (letter.user_id === session.me.id) return;
+    entry = {
+      name,
+      channelId: channel.id,
+      from: letter.user_id,
+      readOnly: false,
+      images: [appData(letter).image],
       image: appData(letter).image,
-    },
-  ];
+    };
+  }
+
+  const existingIndex = inbox.value.findIndex((bottle) => bottle.name === name);
+  if (existingIndex !== -1) {
+    const next = [...inbox.value];
+    next[existingIndex] = entry;
+    inbox.value = next;
+  } else {
+    inbox.value = [...inbox.value, entry];
+  }
+}
+
+export function removeBottle(name) {
+  inbox.value = inbox.value.filter((bottle) => bottle.name !== name);
 }
 
 async function loadInbox() {
   const names = new Set();
 
   for (const channel of session.me.channels ?? []) {
-    if (appData(channel)?.to === session.me.id) names.add(channel.name);
+    const data = appData(channel);
+    if (data?.to === session.me.id || data?.from === session.me.id) {
+      names.add(channel.name);
+    }
   }
   for (const message of session.hubMessages) {
     if (isBottleForMe(message)) names.add(appData(message).bottle);
@@ -92,6 +121,7 @@ export async function startBottles() {
   session = current;
   connect();
   await loadInbox();
+  console.log("Nombre de bouteilles sur l'île :", inbox.value.length);
 }
 
 export function stopBottles() {

@@ -27,8 +27,8 @@ import { Cloud } from "@/webgl/objects/Cloud.js";
 import { damp } from "@/utils/maths.js";
 
 const HORIZON = 0xa3cbe4;
-const DEFAULT_CAMERA_POS = new THREE.Vector3(-109.5, 39, 21.5);
-const DEFAULT_CAMERA_TARGET = new THREE.Vector3(15.5, 17.5, 14.5);
+const DEFAULT_CAMERA_POS = new THREE.Vector3(-85.5, 28, 19);
+const DEFAULT_CAMERA_TARGET = new THREE.Vector3(8, 12, 12);
 const ISLAND_POS = new THREE.Vector3(0, 1, 0);
 const ISLAND_SCALE = 120;
 const ISLAND_ROTATION = new THREE.Vector3(0, -29, 0);
@@ -47,6 +47,8 @@ const BOTTLE_POS = new THREE.Vector3(-30, -3, 45);
 const BOTTLE_SCALE = 6;
 const BOTTLE_FLOATING_AMPLITUDE = 0.6;
 const BOTTLE_FLOATING_SPEED = 1.2;
+const BOTTLE_MIN_SPACING = 12;
+const LETTER_STACK_GAP = 7.6;
 const CLOUDS_CONFIG = [
   { x: 180, y: 60, z: -180, scale: 50, speed: 3.5, textureIndex: 0 },
   { x: 220, y: 90, z: -70, scale: 65, speed: 2.2, textureIndex: 1 },
@@ -67,9 +69,13 @@ export class SceneApp extends WebGLApp {
     this.ocean = null;
     this.clouds = [];
     this.letter = null;
+    this.backLetter = null;
+    this.showBackLetter = false;
     this.island = null;
-    this.bottle = null;
-    this.hasBottle = false;
+    this.bottles = new Map();
+    this.pendingBottles = [];
+    this.isDestroyed = false;
+    this.spawnRaycaster = new THREE.Raycaster();
     this.hemiLight = null;
     this.sun = null;
     this.pipeline = null;
@@ -78,7 +84,9 @@ export class SceneApp extends WebGLApp {
     this.height = 0;
 
     this.letterWriting = new Letter();
+    this.topLetterWriting = new Letter();
     this.letterMesh = null;
+    this.stackOffset = 0;
     this.isWriting = false;
     this.onBarrelClick = null;
     this.onBottleClick = null;
@@ -137,33 +145,32 @@ export class SceneApp extends WebGLApp {
       customTexture: this.letterWriting.texture,
       alignBottom: false,
     });
+    this.backLetter = new Model({
+      modelUrl: "/models/letter.glb",
+      scale: 60,
+      customTexture: this.topLetterWriting.texture,
+      alignBottom: false,
+    });
     this.island = new Model({
       modelUrl: "/models/full_island.glb",
       scale: ISLAND_SCALE,
       alignBottom: false,
       hover: { label: "Écrire une lettre", lift: 0 },
     });
-    this.bottle = new Model({
-      modelUrl: "/models/bottle.glb",
-      scale: BOTTLE_SCALE,
-      hover: { label: "Ouvrir la bouteille" },
-    });
-    const [letterGroup, islandGroup, bottleGroup] = await Promise.all([
+    const [letterGroup, backLetterGroup, islandGroup] = await Promise.all([
       this.letter.load(this.assetLoader),
+      this.backLetter.load(this.assetLoader),
       this.island.load(this.assetLoader),
-      this.bottle.load(this.assetLoader),
     ]);
     letterGroup.visible = false;
     this.scene.add(letterGroup);
+    backLetterGroup.visible = false;
+    this.scene.add(backLetterGroup);
     islandGroup.position.copy(this.params.islandPosition);
     this.scene.add(islandGroup);
-    bottleGroup.position.copy(this.params.bottlePosition);
-    bottleGroup.rotation.z = Math.PI / 8;
-    this.scene.add(bottleGroup);
     this.islandBasePosition.copy(islandGroup.position);
     this.islandBaseScale = islandGroup.scale.x;
     this.params.islandScale = this.islandBaseScale;
-    this.params.bottleScale = bottleGroup.scale.x;
 
     letterGroup.traverse((child) => {
       if (!child.isMesh) return;
@@ -173,7 +180,10 @@ export class SceneApp extends WebGLApp {
     });
 
     const baseImage = this.letterMesh?.userData.baseMap?.image;
-    if (baseImage) this.letterWriting.setBackground(baseImage);
+    if (baseImage) {
+      this.letterWriting.setBackground(baseImage);
+      this.topLetterWriting.setBackground(baseImage);
+    }
   }
 
   setPointer(clientX, clientY) {
@@ -204,8 +214,19 @@ export class SceneApp extends WebGLApp {
   }
 
   applyLetterLayout() {
-    this.letter.group.position.copy(this.params.letterPosition);
+    const camUp = new THREE.Vector3(0, 1, 0).applyQuaternion(
+      this.camera.quaternion,
+    );
+    this.letter.group.position
+      .copy(this.params.letterPosition)
+      .addScaledVector(camUp, this.stackOffset);
     this.letter.group.scale.setScalar(this.params.letterScale);
+    if (this.backLetter?.group) {
+      this.backLetter.group.scale.setScalar(this.params.letterScale);
+      this.backLetter.group.position
+        .copy(this.params.letterPosition)
+        .addScaledVector(camUp, this.stackOffset + LETTER_STACK_GAP);
+    }
     this.darkBackgroundPlane.position.copy(this.params.overlayPosition);
   }
 
@@ -219,9 +240,9 @@ export class SceneApp extends WebGLApp {
     if (this.hovered === this.island) {
       this.audioManager.play("barrelClick");
       this.onBarrelClick?.();
-    } else if (this.hovered === this.bottle) {
+    } else if (this.hovered?.bottleData) {
       this.audioManager.play("bottleClick");
-      this.onBottleClick?.();
+      this.onBottleClick?.(this.hovered.bottleData);
     }
   };
 
@@ -288,16 +309,16 @@ export class SceneApp extends WebGLApp {
     this.updateHover();
     this.updateParallax(delta);
 
-    if (this.bottle?.group) {
-      const {
-        bottlePosition: pos,
-        bottleFloatingSpeed: speed,
-        bottleFloatingAmplitude: amp,
-      } = this.params;
-      this.bottle.group.position.x = pos.x;
-      this.bottle.group.position.z = pos.z;
-      this.bottle.group.rotation.y = Math.sin(elapsed * 0.2);
-      this.bottle.group.position.y = pos.y + Math.sin(elapsed * speed) * amp;
+    const {
+      bottleFloatingSpeed: speed,
+      bottleFloatingAmplitude: amp,
+    } = this.params;
+    for (const entry of this.bottles.values()) {
+      const group = entry.model?.group;
+      if (!group) continue;
+      group.rotation.y = entry.baseRotY + Math.sin(elapsed * 0.2 + entry.phase);
+      group.position.y =
+        entry.basePos.y + Math.sin(elapsed * speed + entry.phase) * amp;
     }
 
     for (const cloud of this.clouds) {
@@ -307,7 +328,19 @@ export class SceneApp extends WebGLApp {
     this.letterWriting?.update(delta * 1000);
 
     if (this.isWriting) {
+      const camUp = new THREE.Vector3(0, 1, 0).applyQuaternion(
+        this.camera.quaternion,
+      );
+      this.letter.group.position
+        .copy(this.params.letterPosition)
+        .addScaledVector(camUp, this.stackOffset);
       this.letter.group.quaternion.copy(this.camera.quaternion);
+      if (this.showBackLetter && this.backLetter?.group) {
+        this.backLetter.group.position
+          .copy(this.params.letterPosition)
+          .addScaledVector(camUp, this.stackOffset + LETTER_STACK_GAP);
+        this.backLetter.group.quaternion.copy(this.camera.quaternion);
+      }
       this.darkBackgroundPlane.quaternion.copy(this.camera.quaternion);
     }
   }
@@ -412,6 +445,9 @@ export class SceneApp extends WebGLApp {
 
     this.applyMode();
     this.isReady = true;
+    if (this.pendingBottles.length) {
+      this.setBottles(this.pendingBottles);
+    }
   }
 
   setMode(mode) {
@@ -425,22 +461,132 @@ export class SceneApp extends WebGLApp {
     this.setCameraPose(cameraPosition, cameraTarget);
     this.applyIslandTransform();
     this.applyBottleTransform();
-    this.updateBottle();
+    this.updateBottles();
   }
 
-  setBottleAvailable(available) {
-    this.hasBottle = available;
-    this.updateBottle();
+  findBottleSpawnPosition() {
+    this.island?.group?.updateMatrixWorld(true);
+    const containers = this.island?.bottleContainers;
+    if (!containers?.length) {
+      return this.params.bottlePosition.clone();
+    }
+
+    const box = new THREE.Box3();
+    for (const container of containers) {
+      box.expandByObject(container);
+    }
+
+    const existingPositions = [...this.bottles.values()]
+      .map((entry) => entry.basePos)
+      .filter(Boolean);
+
+    const y = this.params.bottlePosition.y;
+    const origin = new THREE.Vector3();
+    const down = new THREE.Vector3(0, -1, 0);
+    let bestCandidate = null;
+    let bestMinDist = -1;
+
+    for (let attempt = 0; attempt < 150; attempt++) {
+      const x = box.min.x + Math.random() * (box.max.x - box.min.x);
+      const z = box.min.z + Math.random() * (box.max.z - box.min.z);
+
+      origin.set(x, box.max.y + 50, z);
+      this.spawnRaycaster.set(origin, down);
+      if (this.spawnRaycaster.intersectObjects(containers, false).length === 0) {
+        continue;
+      }
+
+      const minDist = existingPositions.length
+        ? Math.min(
+            ...existingPositions.map((pos) => Math.hypot(x - pos.x, z - pos.z)),
+          )
+        : Infinity;
+
+      if (minDist >= BOTTLE_MIN_SPACING) {
+        return new THREE.Vector3(x, y, z);
+      }
+
+      if (minDist > bestMinDist) {
+        bestMinDist = minDist;
+        bestCandidate = new THREE.Vector3(x, y, z);
+      }
+    }
+
+    return bestCandidate ?? this.params.bottlePosition.clone();
   }
 
-  updateBottle() {
-    if (!this.bottle?.group) return;
-    const visible = !this.isLogin && this.hasBottle;
-    this.bottle.group.visible = visible;
-    if (!visible && this.hovered === this.bottle) this.setHovered(null);
+  async setBottles(bottlesData = []) {
+    this.pendingBottles = bottlesData;
+    if (!this.isReady) return;
+
+    const nextByName = new Map(bottlesData.map((b) => [b.name, b]));
+
+    for (const [name, entry] of this.bottles.entries()) {
+      if (nextByName.has(name)) {
+        entry.data = nextByName.get(name);
+        if (entry.model) entry.model.bottleData = entry.data;
+        continue;
+      }
+      if (entry.model && this.hovered === entry.model) this.setHovered(null);
+      if (entry.model?.group) this.scene.remove(entry.model.group);
+      entry.model?.destroy();
+      this.bottles.delete(name);
+    }
+
+    const toAdd = bottlesData.filter((b) => !this.bottles.has(b.name));
+    for (const bottleData of toAdd) {
+      const placeholder = {
+        data: bottleData,
+        model: null,
+        basePos: this.findBottleSpawnPosition(),
+        phase: Math.random() * Math.PI * 2,
+        baseRotY: Math.random() * Math.PI * 2,
+        tiltX: (Math.random() - 0.5) * 0.25,
+        tiltZ: Math.PI / 8 + (Math.random() - 0.5) * 0.25,
+      };
+      this.bottles.set(bottleData.name, placeholder);
+
+      const model = new Model({
+        modelUrl: "/models/bottle.glb",
+        scale: BOTTLE_SCALE,
+        hover: {
+          label: bottleData.readOnly ? "Lire la réponse" : "Ouvrir la bouteille",
+        },
+      });
+      const group = await model.load(this.assetLoader);
+      if (this.isDestroyed || this.bottles.get(bottleData.name) !== placeholder) {
+        model.destroy();
+        continue;
+      }
+
+      model.bottleData = bottleData;
+      group.position.copy(placeholder.basePos);
+      group.rotation.x = placeholder.tiltX;
+      group.rotation.z = placeholder.tiltZ;
+      group.scale.setScalar(this.params.bottleScale);
+      if (this.sun) applyBaseShadow(group, this.sun);
+      this.scene.add(group);
+      placeholder.model = model;
+    }
+
+    this.updateBottles();
+  }
+
+  updateBottles() {
+    const visible = !this.isLogin;
+    const activeModels = [];
+
+    for (const entry of this.bottles.values()) {
+      const model = entry.model;
+      if (!model?.group) continue;
+      model.group.visible = visible;
+      if (!visible && this.hovered === model) this.setHovered(null);
+      if (visible && model.hover) activeModels.push(model);
+    }
+
     this.hoverables = this.isLogin
       ? []
-      : [this.island, visible && this.bottle].filter((m) => m?.hover);
+      : [this.island, ...activeModels].filter((m) => m?.hover);
   }
 
   setHovered(model) {
@@ -500,9 +646,12 @@ export class SceneApp extends WebGLApp {
     });
   }
 
-  enterLetter() {
+  enterLetter({ stacked = false } = {}) {
     if (!this.letterMesh) return;
+    gsap.killTweensOf(this);
+    this.stackOffset = 0;
     this.isWriting = true;
+    this.showBackLetter = stacked;
     this.letterWriting.inLetterMode = true;
     this.audioManager.setLetterMode(true);
     this.setHovered(null);
@@ -514,7 +663,37 @@ export class SceneApp extends WebGLApp {
     this.applyLetterCamera();
     this.applyLetterLayout();
     this.letter.group.visible = true;
+    if (this.backLetter?.group) {
+      this.backLetter.group.visible = stacked;
+    }
     this.endDarkBackgroundPlaneTransition();
+  }
+
+  async setTopLetterImage(src) {
+    if (!src) {
+      await this.topLetterWriting.showReceived(null);
+      this.setBackLetterVisible(false);
+      return;
+    }
+    await this.topLetterWriting.showReceived(src);
+    this.topLetterWriting.render();
+    this.setBackLetterVisible(true);
+  }
+
+  setBackLetterVisible(visible) {
+    this.showBackLetter = visible;
+    if (this.backLetter?.group) {
+      this.backLetter.group.visible = visible;
+    }
+  }
+
+  focusStackedLetter(index) {
+    gsap.killTweensOf(this);
+    gsap.to(this, {
+      stackOffset: index === 1 ? -LETTER_STACK_GAP : 0,
+      duration: 0.55,
+      ease: "power3.inOut",
+    });
   }
 
   applyIslandTransform() {
@@ -535,9 +714,9 @@ export class SceneApp extends WebGLApp {
   }
 
   applyBottleTransform() {
-    if (!this.bottle?.group) return;
-    this.bottle.group.position.copy(this.params.bottlePosition);
-    this.bottle.group.scale.setScalar(this.params.bottleScale);
+    for (const entry of this.bottles.values()) {
+      entry.model?.group?.scale.setScalar(this.params.bottleScale);
+    }
   }
 
   refreshView() {
@@ -555,12 +734,16 @@ export class SceneApp extends WebGLApp {
   }
 
   leaveLetter() {
+    gsap.killTweensOf(this);
+    this.stackOffset = 0;
     this.isWriting = false;
+    this.showBackLetter = false;
     this.letterWriting.inLetterMode = false;
     this.audioManager.setLetterMode(false);
     this.audioManager.stop("eraserRub");
     this.letterWriting.cancelImage();
     this.letter.group.visible = false;
+    if (this.backLetter?.group) this.backLetter.group.visible = false;
     gsap.killTweensOf(this.darkBackgroundPlane.material);
     this.darkBackgroundPlane.visible = false;
 
@@ -577,6 +760,8 @@ export class SceneApp extends WebGLApp {
   }
 
   destroy() {
+    this.isDestroyed = true;
+    gsap.killTweensOf(this);
     document.removeEventListener("pointerdown", this.onClick);
     const canvas = this.renderer.domElement;
     canvas.removeEventListener("pointermove", this.onPointerMove);
@@ -625,10 +810,19 @@ export class SceneApp extends WebGLApp {
 
     if (this.letter) {
       if (this.letter.group) {
+        gsap.killTweensOf(this.letter.group.scale);
         this.scene.remove(this.letter.group);
       }
       this.letter.destroy();
       this.letter = null;
+    }
+
+    if (this.backLetter) {
+      if (this.backLetter.group) {
+        this.scene.remove(this.backLetter.group);
+      }
+      this.backLetter.destroy();
+      this.backLetter = null;
     }
 
     if (this.island) {
@@ -639,11 +833,12 @@ export class SceneApp extends WebGLApp {
       this.island = null;
     }
 
-    if (this.bottle) {
-      if (this.bottle.group) this.scene.remove(this.bottle.group);
-      this.bottle.destroy();
-      this.bottle = null;
+    for (const entry of this.bottles.values()) {
+      if (entry.model?.group) this.scene.remove(entry.model.group);
+      entry.model?.destroy();
     }
+    this.bottles.clear();
+    this.pendingBottles = [];
 
     if (this.assetLoader) {
       this.assetLoader.destroy();
@@ -668,6 +863,8 @@ export class SceneApp extends WebGLApp {
     }
 
     this.letterWriting.onSound = null;
+    this.topLetterWriting?.destroy();
+    this.topLetterWriting = null;
     this.audioManager?.destroy();
     this.audioManager = null;
 

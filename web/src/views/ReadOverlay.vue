@@ -15,11 +15,49 @@
         draggable="false"
       />
     </button>
+
+    <button
+      v-if="bottle?.images?.length > 1"
+      type="button"
+      class="switch-button"
+      :class="{ 'is-down': activeIndex === 1 }"
+      aria-label="Changer de lettre"
+      @pointerdown.stop
+      @click="emit('switch')"
+    >
+      <img class="arrow" src="/images/up-arrow.webp" alt="" draggable="false" />
+    </button>
+
+    <button
+      v-if="!bottle?.readOnly"
+      type="button"
+      class="reply-button"
+      aria-label="Répondre à la lettre"
+      @pointerdown.stop
+      @click="emit('reply')"
+    >
+      <img
+        v-for="state in 2"
+        :key="state"
+        :class="`state state-${state}`"
+        :src="`/images/write${state}.webp`"
+        alt=""
+        draggable="false"
+      />
+    </button>
   </div>
 </template>
 
 <script setup>
-const emit = defineEmits(["back"]);
+defineProps({
+  bottle: Object,
+  activeIndex: {
+    type: Number,
+    default: 0,
+  },
+});
+
+const emit = defineEmits(["back", "reply", "switch"]);
 </script>
 
 <style scoped lang="scss">
@@ -54,6 +92,78 @@ const emit = defineEmits(["back"]);
     &:hover {
       .state-2 {
         opacity: 0.5;
+      }
+    }
+  }
+
+  .switch-button {
+    all: unset;
+    position: absolute;
+    z-index: 1;
+    cursor: pointer;
+    transition:
+      transform 0.2s ease,
+      opacity 0.2s ease;
+    top: 50%;
+    right: 2%;
+    height: 120px;
+    transform: translateX(-50%) rotate(90deg);
+    width: 120px;
+    
+    &.is-down{
+      transform: translateX(-50%) rotate(-90deg);
+    }
+
+    .arrow {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      pointer-events: none;
+      user-select: none;
+      transition: transform 0.3s ease;
+    }
+
+    // &:hover {
+    //   transform: translateX(-50%) scale(1.08);
+    // }
+
+    // &.is-down {
+    //   top: auto;
+    //   bottom: 24px;
+
+    //   .arrow {
+    //     transform: rotate(180deg);
+    //   }
+    // }
+  }
+
+  .reply-button {
+    all: unset;
+    position: absolute;
+    z-index: 1;
+    right: 30px;
+    bottom: 30px;
+    width: 110px;
+    height: 110px;
+    cursor: pointer;
+
+    .state {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      user-select: none;
+    }
+
+    .state-2 {
+      opacity: 0;
+      transition: opacity 0.2s ease;
+    }
+
+    &:hover {
+      .state-2 {
+        opacity: 1;
       }
     }
   }

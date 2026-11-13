@@ -11,9 +11,17 @@
     <LetterOverlay
       v-if="isWriting"
       :letter="app?.letterWriting"
+      :reply-to="replyingToBottle"
       @back="leaveLetterMode"
     />
-    <ReadOverlay v-if="readingBottle" @back="leaveReadMode" />
+    <ReadOverlay
+      v-if="readingBottle"
+      :bottle="readingBottle"
+      :active-index="activeLetterIndex"
+      @back="leaveReadMode"
+      @reply="replyToBottle"
+      @switch="switchLetter"
+    />
   </div>
 </template>
 
@@ -28,14 +36,18 @@ import ReadOverlay from "@/views/ReadOverlay.vue";
 
 const isWriting = ref(false);
 const readingBottle = ref(null);
+const replyingToBottle = ref(null);
+const activeLetterIndex = ref(0);
 
 watch(
   app,
   (sceneApp) => {
     if (!sceneApp) return;
     sceneApp.onBarrelClick = () => {
-      fadeThrough(() => {
-        sceneApp.enterLetter();
+      fadeThrough(async () => {
+        replyingToBottle.value = null;
+        await sceneApp.setTopLetterImage(null);
+        sceneApp.enterLetter({ stacked: false });
         isWriting.value = true;
       });
     };
@@ -45,8 +57,8 @@ watch(
 );
 
 watch(
-  [app, () => inbox.value.length],
-  ([sceneApp, count]) => sceneApp?.setBottleAvailable(count > 0),
+  [app, inbox],
+  ([sceneApp, list]) => sceneApp?.setBottles(list ?? []),
   { immediate: true },
 );
 
@@ -59,17 +71,42 @@ onBeforeUnmount(() => {
   if (!app.value) return;
   app.value.onBarrelClick = null;
   app.value.onBottleClick = null;
-  app.value.setBottleAvailable(false);
+  app.value.setBottles([]);
 });
 
-function openBottle() {
-  const bottle = inbox.value[0];
+function openBottle(bottle = inbox.value[0]) {
   if (!bottle || !app.value) return;
 
   fadeThrough(async () => {
-    await app.value.letterWriting.showReceived(bottle.image);
-    app.value.enterLetter();
+    activeLetterIndex.value = 0;
+    const images = bottle.images ?? [bottle.image];
+    await app.value.letterWriting.showReceived(images[0]);
+    await app.value.setTopLetterImage(images.length > 1 ? images[1] : null);
+    app.value.enterLetter({ stacked: images.length > 1 });
     readingBottle.value = bottle;
+  });
+}
+
+function switchLetter() {
+  const bottle = readingBottle.value;
+  if (!bottle?.images || bottle.images.length < 2 || !app.value) return;
+  const nextIndex = activeLetterIndex.value === 0 ? 1 : 0;
+  activeLetterIndex.value = nextIndex;
+  app.value.focusStackedLetter(nextIndex);
+}
+
+function replyToBottle() {
+  const bottle = readingBottle.value;
+  if (!bottle || !app.value) return;
+
+  fadeThrough(async () => {
+    readingBottle.value = null;
+    replyingToBottle.value = bottle;
+    const originalImage = bottle.images?.[0] ?? bottle.image;
+    app.value.letterWriting.clear();
+    await app.value.letterWriting.showReceived(null);
+    await app.value.setTopLetterImage(originalImage);
+    isWriting.value = true;
   });
 }
 
@@ -78,13 +115,16 @@ function leaveReadMode() {
     readingBottle.value = null;
     app.value?.leaveLetter();
     await app.value?.letterWriting.showReceived(null);
+    await app.value?.setTopLetterImage(null);
   });
 }
 
 function leaveLetterMode() {
-  fadeThrough(() => {
+  fadeThrough(async () => {
     isWriting.value = false;
+    replyingToBottle.value = null;
     app.value?.leaveLetter();
+    await app.value?.setTopLetterImage(null);
   });
 }
 

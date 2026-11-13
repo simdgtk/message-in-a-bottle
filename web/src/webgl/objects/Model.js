@@ -24,6 +24,7 @@ export class Model {
     this.scale = scale;
     this.group = null;
     this.colliders = [];
+    this.bottleContainers = [];
     this.customTexture = customTexture;
     // this.mixCustomMaterial = options.mixCustomMaterial
     // this.mixCustomMaterial = mixCustomMaterial;
@@ -36,7 +37,13 @@ export class Model {
     this.model.traverse((child) => {
       if (!child.isMesh) return;
 
-      if (child.name.includes("Collider")) {
+      if (child.name.includes("Bottles_Container")) {
+        this.bottleContainers.push(child);
+        child.material?.dispose();
+        child.material = new THREE.MeshBasicMaterial({ side: THREE.DoubleSide });
+        child.visible = false;
+        return;
+      } else if (child.name.includes("Collider")) {
         this.colliders.push(child);
       } else {
         this.meshes.push(child);
@@ -81,7 +88,9 @@ export class Model {
     this.group.add(this.lift);
 
     this.group.updateMatrixWorld(true);
-    this.colliders.forEach((collider) => this.group.attach(collider));
+    [...this.colliders, ...this.bottleContainers].forEach((obj) =>
+      this.group.attach(obj),
+    );
     this.hitTargets.forEach((object) => (object.userData.model = this));
 
     if (this.hover?.label) {
