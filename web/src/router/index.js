@@ -1,24 +1,33 @@
-// Composables
 import { createRouter, createWebHistory } from "vue-router";
 
-const SKIP_AUTH = false;
+export const INTRO_SEEN_KEY = "folio_intro_seen";
+
+function hasSeenIntro() {
+  try {
+    return localStorage.getItem(INTRO_SEEN_KEY) === "true";
+  } catch {
+    return false;
+  }
+}
 
 const routes = [
   {
     path: "/",
-    ...(SKIP_AUTH
-      ? { redirect: "/island" }
-      : { component: () => import("@/views/Island.vue") }),
+    redirect: "/island",
   },
   {
     path: "/island",
+    name: "island",
     component: () => import("@/views/Island.vue"),
   },
   {
-    path: "/login",
-    name: "login",
-    component: () =>
-      import(/* webpackChunkName: "login" */ "@/views/Login.vue"),
+    path: "/intro",
+    name: "intro",
+    component: () => import("@/views/Login.vue"),
+  },
+  {
+    path: "/:pathMatch(.*)*",
+    redirect: "/island",
   },
 ];
 
@@ -28,11 +37,10 @@ export const router = createRouter({
 });
 
 router.beforeEach((to) => {
-  if (SKIP_AUTH) return;
-  const isLoggedIn = localStorage.getItem("user_token") !== null;
+  const seen = hasSeenIntro();
 
-  if (!isLoggedIn && to.name !== "login" && to.name !== "letter") return { name: "login" };
-  if (isLoggedIn && to.name === "login") return { path: "/" };
+  if (!seen && to.name !== "intro") return { name: "intro" };
+  if (seen && to.name === "intro") return { name: "island" };
 });
 
 export default router;

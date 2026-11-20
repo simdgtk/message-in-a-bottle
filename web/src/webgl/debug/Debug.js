@@ -591,6 +591,15 @@ export class Debug {
       .on("change", () => {
         letter.render();
       });
+
+    fLetter.addButton({ title: "Exporter .webp" }).on("click", () => {
+      const dataUrl = letter.exportImage();
+      if (!dataUrl) return;
+      const link = document.createElement("a");
+      link.href = dataUrl;
+      link.download = "letter.webp";
+      link.click();
+    });
   }
 
   destroy() {

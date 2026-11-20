@@ -11,7 +11,7 @@ import Scene from "@/components/Scene.vue";
 import { setFadeElement } from "@/composables/useFade";
 
 const route = useRoute();
-const sceneMode = computed(() => (route.name === "login" ? "login" : "island"));
+const sceneMode = computed(() => (route.name === "intro" ? "login" : "island"));
 </script>
 
 <style lang="scss" scoped>

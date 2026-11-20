@@ -32,9 +32,10 @@
       v-if="!bottle?.readOnly"
       type="button"
       class="reply-button"
-      aria-label="Répondre à la lettre"
+      aria-label="Réponse désactivée (mode démo)"
+      aria-disabled="true"
+      disabled
       @pointerdown.stop
-      @click="emit('reply')"
     >
       <img
         v-for="state in 2"
@@ -155,10 +156,16 @@ function backToIsland() {
       transition: opacity 0.2s ease;
     }
 
-    &:hover {
+    &:hover:not(:disabled) {
       .state-2 {
         opacity: 1;
       }
+    }
+
+    &:disabled {
+      cursor: not-allowed;
+      filter: grayscale(1);
+      opacity: 0.45;
     }
   }
 }

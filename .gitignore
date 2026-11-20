@@ -13,6 +13,5 @@ api/tmp/
 .idea/
 *.log
 
-.claude
 graphify-out/
 .env

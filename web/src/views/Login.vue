@@ -1,108 +1,55 @@
 <template>
-  <section class="login" ref="loginRef">
+  <section class="login">
     <div class="board">
-      <form class="paper" @submit.prevent="onSubmit">
-        <input
-          class="field username"
-          type="text"
-          name="username"
-          id="username"
-          v-model="username"
-          @input="error = ''"
-          placeholder="Username"
-          autocomplete="username"
-          required
-        />
-        <input
-          class="field password"
-          type="password"
-          name="password"
-          id="password"
-          v-model="password"
-          placeholder="Password"
-          autocomplete="current-password"
-          required
-        />
-
-        <p v-if="error" class="error" role="alert">{{ error }}</p>
-
-        <button class="button submit-login" type="submit" :disabled="loading">
-          Log in
-        </button>
+      <div class="paper">
+        <div class="intro-content">
+          <h1 class="intro-title">{{ INTRO_TITLE }}</h1>
+          <p v-for="(paragraph, index) in INTRO_PARAGRAPHS" :key="index" class="intro-text">
+            {{ paragraph }}
+          </p>
+        </div>
 
         <button
-          class="button submit-signup"
+          class="button confirm-button"
           type="button"
-          :disabled="loading"
-          @click="onSignup"
+          :disabled="leaving"
+          @click="onConfirm"
         >
-          Create an account
+          Compris
         </button>
-      </form>
+      </div>
     </div>
   </section>
 </template>
 
 <script setup>
 import { ref } from "vue";
-import { api } from "@/utils/api";
-import { router } from "@/router/index";
+import { router, INTRO_SEEN_KEY } from "@/router/index";
 import { fadeThrough } from "@/composables/useFade";
+import { sceneApp } from "@/composables/useSceneApp";
 
-const username = ref("");
-const password = ref("");
-const loading = ref(false);
-const error = ref("");
+const INTRO_TITLE = "Message in a Bottle";
+const INTRO_PARAGRAPHS = [
+  "Bienvenue sur la version portfolio de ce projet. Pour faciliter la visite sans serveur ni inscription, l'envoi et la réponse aux bouteilles sont désactivés.",
+  "Tu peux explorer l'île, ouvrir la bouteille reçue ainsi que la réponse déjà arrivée, et tester l'écriture, le dessin et l'ajout de photos sur la lettre.",
+];
 
-const loginRef = ref(null);
+const leaving = ref(false);
 
-async function login() {
-  const response = await api.post("/login", {
-    username: username.value,
-    password: password.value,
-  });
-  localStorage.setItem("user_token", response.data);
-  await fadeThrough(() => router.push("/island"));
-}
-
-async function onSubmit() {
-  loading.value = true;
-  error.value = "";
+async function onConfirm() {
+  if (leaving.value) return;
+  leaving.value = true;
+  sceneApp.value?.audioManager?.play("uiInteraction");
 
   try {
-    await login();
-  } catch (err) {
-    const status = err.response?.status;
-    if (status === 404) {
-      error.value = "Aucun compte avec ce nom, créez-en un ci-dessous";
-    } else if (status === 401) {
-      error.value = "Mauvais mot de passe";
-    } else {
-      error.value = "Erreur serveur";
-    }
-  } finally {
-    loading.value = false;
-  }
-}
-
-async function onSignup() {
-  if (!username.value || !password.value) {
-    error.value = "Remplissez un nom d'utilisateur et un mot de passe";
-    return;
-  }
-  loading.value = true;
-  error.value = "";
-
-  try {
-    await api.post("/user", {
-      username: username.value,
-      password: password.value,
-    });
-    await login();
+    localStorage.setItem(INTRO_SEEN_KEY, "true");
   } catch {
-    error.value = "Impossible de créer le compte";
+  }
+
+  try {
+    await fadeThrough(() => router.push({ name: "island" }));
   } finally {
-    loading.value = false;
+    leaving.value = false;
   }
 }
 </script>
@@ -133,56 +80,50 @@ async function onSignup() {
   }
 
   .paper {
-    position: relative;
     width: 95%;
     aspect-ratio: 957 / 1179;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+    padding: 15% 13% 13%;
+    box-sizing: border-box;
     background: url("/images/login/paper.webp") center / 100% 100% no-repeat;
-  }
-
-  .field,
-  .button,
-  .error {
-    position: absolute;
-    left: 50%;
-    translate: -50% 0;
     font-family: var(--font-primary);
-    font-size: 20px;
-  }
-
-  .field {
-    top: 20%;
-    width: 75%;
-    aspect-ratio: 737 / 148;
-    padding: 24px;
-    border: none;
-    outline: none;
-    background: url("/images/login/frame.webp") center / 100% 100% no-repeat;
     color: #5a2a24;
-    font-size: 20px;
-
-    &::placeholder {
-      color: rgba(90, 42, 36, 0.45);
-    }
-
-    &.password {
-      top: 40%;
-    }
   }
 
-  .error {
-    top: 55%;
-    width: 80%;
-    margin: 0;
+  .intro-content {
+    width: 100%;
+    min-height: 0;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 0.9rem;
     text-align: center;
-    color: #a8433a;
-    font-size: 20px;
+  }
+
+  .intro-title {
+    margin: 0;
+    font-size: clamp(20px, 2vw, 26px);
+    font-weight: 700;
+    line-height: 1.25;
+  }
+
+  .intro-text {
+    margin: 0;
+    font-size: clamp(14px, 1.4vw, 18px);
+    line-height: 1.45;
   }
 
   .button {
+    flex-shrink: 0;
     border: none;
     background: center / 100% 100% no-repeat;
     color: #fdebc8;
-    font-size: 20px;
+    font-family: var(--font-primary);
+    font-size: clamp(16px, 1.5vw, 20px);
     cursor: pointer;
     transition:
       scale 0.15s ease,
@@ -202,18 +143,10 @@ async function onSignup() {
       opacity: 0.6;
     }
 
-    &.submit-login {
-      top: 64%;
-      width: 36%;
+    &.confirm-button {
+      width: 44%;
       aspect-ratio: 341 / 98;
       background-image: url("/images/login/login_button.webp");
-    }
-
-    &.submit-signup {
-      top: 80%;
-      width: 60%;
-      aspect-ratio: 541 / 104;
-      background-image: url("/images/login/signin_button.webp");
     }
   }
 }

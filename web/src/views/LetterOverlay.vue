@@ -47,16 +47,13 @@
       </button>
     </div>
 
-    <p v-if="sendError" class="send-error">{{ sendError }}</p>
-
     <button
       type="button"
       class="write-button"
-      :class="{ 'is-sending': isSending }"
-      aria-label="Envoyer la bouteille"
-      :disabled="isSending"
+      aria-label="Envoi désactivé (mode démo)"
+      aria-disabled="true"
+      disabled
       @pointerdown.stop
-      @click="send"
     >
       <img
         v-for="state in 2"
@@ -82,8 +79,6 @@
 
 <script setup>
 import { ref, onMounted, onBeforeUnmount } from "vue";
-import { sendBottle, replyBottle } from "@/utils/bottle";
-import { removeBottle } from "@/composables/useBottles";
 import { sceneApp } from "@/composables/useSceneApp";
 
 const props = defineProps({
@@ -92,41 +87,6 @@ const props = defineProps({
 });
 
 const emit = defineEmits(["back"]);
-
-const isSending = ref(false);
-const sendError = ref("");
-
-async function send() {
-  const letter = props.letter;
-  if (!letter || isSending.value) return;
-
-  if (letter.isEmpty()) {
-    sendError.value = "La lettre est vide";
-    return;
-  }
-
-  isSending.value = true;
-  sendError.value = "";
-
-  try {
-    if (props.replyTo) {
-      await replyBottle(props.replyTo, letter.exportImage());
-      removeBottle(props.replyTo.name);
-    } else {
-      await sendBottle(letter.exportImage());
-    }
-    letter.clear();
-    emit("back");
-  } catch (error) {
-    console.warn(error);
-    sendError.value =
-      error.message === "NO_RECIPIENT"
-        ? "Personne d'autre n'est encore dans l'océan :("
-        : "La bouteille n'a pas pu partir";
-  } finally {
-    isSending.value = false;
-  }
-}
 
 const overlayRef = ref(null);
 const imageInputRef = ref(null);
@@ -205,6 +165,22 @@ onMounted(async () => {
   }
   window.addEventListener("keydown", onWindowKeyDown);
 
+  if (import.meta.env.DEV) {
+    window.exportLetter = (filename = "letter.webp") => {
+      const dataUrl = props.letter?.exportImage();
+      if (!dataUrl) {
+        console.warn("Impossible d'exporter la lettre");
+        return null;
+      }
+      const link = document.createElement("a");
+      link.href = dataUrl;
+      link.download = filename;
+      link.click();
+      console.info(`Lettre exportée : ${filename}`);
+      return dataUrl;
+    };
+  }
+
   if (document.fonts?.ready) {
     await document.fonts.ready;
   }
@@ -215,6 +191,9 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   window.removeEventListener("keydown", onWindowKeyDown);
+  if (import.meta.env.DEV && "exportLetter" in window) {
+    delete window.exportLetter;
+  }
   if (props.letter) {
     props.letter.onToolChange = null;
     props.letter.removeTextarea();
@@ -304,27 +283,17 @@ onBeforeUnmount(() => {
       transition: opacity 0.2s ease;
     }
 
-    &:hover {
+    &:hover:not(:disabled) {
       .state-2 {
         opacity: 1;
       }
     }
 
-    &.is-sending {
-      cursor: wait;
-      opacity: 0.5;
+    &:disabled {
+      cursor: not-allowed;
+      filter: grayscale(1);
+      opacity: 0.45;
     }
-  }
-
-  .send-error {
-    position: absolute;
-    z-index: 1;
-    right: 30px;
-    bottom: 150px;
-    margin: 0;
-    color: #fff;
-    font-size: 24px;
-    font-weight: 500;
   }
 
   .toolbar {

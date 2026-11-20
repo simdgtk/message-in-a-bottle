@@ -1,13 +1,5 @@
 <template>
   <div class="island-page">
-    <button
-      v-if="!isWriting && !readingBottle"
-      type="button"
-      class="logout-button"
-      @click="logout"
-    >
-      Log out
-    </button>
     <LetterOverlay
       v-if="isWriting"
       :letter="app?.letterWriting"
@@ -27,7 +19,6 @@
 
 <script setup>
 import { ref, watch, onMounted, onBeforeUnmount } from "vue";
-import { router } from "@/router/index";
 import { inbox, startBottles, stopBottles } from "@/composables/useBottles";
 import { sceneApp as app } from "@/composables/useSceneApp";
 import { fadeThrough } from "@/composables/useFade";
@@ -127,24 +118,4 @@ function leaveLetterMode() {
     await app.value?.setTopLetterImage(null);
   });
 }
-
-function logout() {
-  fadeThrough(() => {
-    localStorage.removeItem("user_token");
-    return router.push("/login");
-  });
-}
 </script>
-
-<style lang="scss" scoped>
-
-.logout-button {
-  position: fixed;
-  top: 30px;
-  left: 30px;
-  z-index: 5;
-  padding: 0.5rem 1rem;
-  cursor: pointer;
-}
-
-</style>
