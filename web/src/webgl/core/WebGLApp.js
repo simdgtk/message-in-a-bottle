@@ -35,7 +35,7 @@ export class WebGLApp {
     this.isDebug =
       urlSearchParams.has("debug") ||
       window.location.hash.includes("debug") ||
-      import.meta.env.DEV;
+      import.meta.env.IS_DEBUG === "true";
 
     this.inspector = null;
     if (this.isDebug) {
