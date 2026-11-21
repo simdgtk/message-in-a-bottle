@@ -1,4 +1,4 @@
-// from Bruno Simon
+// from Bruno Simon & https://gameidea.org/2026/02/01/creating-a-stylized-3d-water-shader/ with transpiler
 import {
   add,
   color,
