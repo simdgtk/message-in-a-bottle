@@ -3,19 +3,73 @@
     <div class="board">
       <div class="paper">
         <div class="intro-content">
-          <h1 class="intro-title">{{ INTRO_TITLE }}</h1>
-          <p v-for="(paragraph, index) in INTRO_PARAGRAPHS" :key="index" class="intro-text">
-            {{ paragraph }}
+          <p class="intro-text">
+            Ce projet a été réalisé en 2 semaines, à Gobelins, en M1 ECNI. Le
+            backend était hébergé et l'utilisateur pouvait envoyer, recevoir et
+            répondre à des messages. Nous avons décidé, après le projet, de
+            ne simplement héberger que la partie front.
+          </p>
+          <p class="intro-text">
+            Vous pouvez voir ici à quoi peut ressembler l'île d'un utilisateur
+            qui a envoyé une lettre et reçu un message.
+          </p>
+          <p class="intro-text">
+            Créa :
+            <a
+              href="https://www.linkedin.com/in/elina-su-858233337/"
+              target="_blank"
+              rel="noopener noreferrer"
+              >Elina Su</a
+            >
+            &
+            <a
+              href="https://www.linkedin.com/in/mathis-boulard-6907b71a1/"
+              target="_blank"
+              rel="noopener noreferrer"
+              >Mathis Boulard</a
+            ><br />
+            Développement :
+            <a
+              href="https://simondaguetkargl.fr/"
+              target="_blank"
+              rel="noopener noreferrer"
+              >Simon Daguet-Kargl</a
+            >
+          </p>
+          <p class="intro-text">
+            Back :
+            <a
+              href="https://github.com/TheLazyHase/chat-server-gobelin"
+              target="_blank"
+              rel="noopener noreferrer"
+              >TheLazyHase</a
+            >
+          </p>
+          <p class="intro-text">
+            Merci à
+            <a
+              href="https://leomouraire.com/"
+              target="_blank"
+              rel="noopener noreferrer"
+              >Léo Mouraire</a
+            >
+            &
+            <a
+              href="https://github.com/TheLazyHase/chat-server-gobelin"
+              target="_blank"
+              rel="noopener noreferrer"
+              >TheLazyHase</a
+            >,
+            pour leurs conseils et accompagnements.
           </p>
         </div>
-
         <button
           class="button confirm-button"
           type="button"
           :disabled="leaving"
           @click="onConfirm"
         >
-          Compris
+          Voir l'île
         </button>
       </div>
     </div>
@@ -28,12 +82,6 @@ import { router, INTRO_SEEN_KEY } from "@/router/index";
 import { fadeThrough } from "@/composables/useFade";
 import { sceneApp } from "@/composables/useSceneApp";
 
-const INTRO_TITLE = "Message in a Bottle";
-const INTRO_PARAGRAPHS = [
-  "Bienvenue sur la version portfolio de ce projet. Pour faciliter la visite sans serveur ni inscription, l'envoi et la réponse aux bouteilles sont désactivés.",
-  "Tu peux explorer l'île, ouvrir la bouteille reçue ainsi que la réponse déjà arrivée, et tester l'écriture, le dessin et l'ajout de photos sur la lettre.",
-];
-
 const leaving = ref(false);
 
 async function onConfirm() {
@@ -43,8 +91,7 @@ async function onConfirm() {
 
   try {
     localStorage.setItem(INTRO_SEEN_KEY, "true");
-  } catch {
-  }
+  } catch {}
 
   try {
     await fadeThrough(() => router.push({ name: "island" }));
@@ -72,7 +119,6 @@ async function onConfirm() {
   .board {
     pointer-events: auto;
     width: min(30rem, 90vw);
-    aspect-ratio: 1031 / 1250;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -81,13 +127,13 @@ async function onConfirm() {
 
   .paper {
     width: 95%;
-    aspect-ratio: 957 / 1179;
     display: flex;
+    margin: 20px;
     flex-direction: column;
     justify-content: space-between;
     align-items: center;
     gap: 1rem;
-    padding: 15% 13% 13%;
+    padding: 15% 8% 8%;
     box-sizing: border-box;
     background: url("/images/login/paper.webp") center / 100% 100% no-repeat;
     font-family: var(--font-primary);
@@ -102,6 +148,14 @@ async function onConfirm() {
     flex-direction: column;
     gap: 0.9rem;
     text-align: center;
+
+    p {
+      text-wrap: balance;
+    }
+
+    a {
+      color: hsl(7, 43%, 45%);
+    }
   }
 
   .intro-title {

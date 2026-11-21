@@ -1,4 +1,3 @@
-import * as THREE from "three/webgpu";
 
 export class Viewport {
   constructor({ container, onResize } = {}) {

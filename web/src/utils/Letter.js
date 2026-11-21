@@ -288,13 +288,6 @@ export class Letter {
       y: (1 - uv.y) * this.height,
       pressure: e.pressure || 0.5,
     };
-
-    // const rect = e.currentTarget.getBoundingClientRect();
-    // return {
-    //   x: ((e.clientX - rect.left) / rect.width) * this.width,
-    //   y: ((e.clientY - rect.top) / rect.height) * this.height,
-    //   pressure: e.pressure || 0.5,
-    // };
   }
 
   handlePointerDown(e) {

@@ -15,6 +15,8 @@ export class AudioManager {
   constructor() {
     this.ambience = new Howl({
       src: ["/audio/ambience.m4a"],
+      html5: true,
+      preload: "metadata",
       loop: true,
       volume: 0,
     });

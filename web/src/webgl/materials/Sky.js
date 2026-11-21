@@ -1,18 +1,9 @@
-import * as THREE from "three/webgpu";
 import {
-  add,
   color,
-  float,
   mix,
-  positionLocal,
-  vec3,
-  smoothstep,
-  uniform,
-  clamp,
-  texture,
-  uv,
-  positionWorldDirection,
+  positionWorldDirection
 } from "three/tsl";
+import * as THREE from "three/webgpu";
 import { MeshBasicNodeMaterial } from "three/webgpu";
 
 const cloudTexture = new THREE.TextureLoader().load("/images/cloud1.webp");

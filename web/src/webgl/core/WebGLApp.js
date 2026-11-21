@@ -1,6 +1,6 @@
+import { Inspector } from "three/examples/jsm/inspector/Inspector.js";
 import * as THREE from "three/webgpu";
 import { Viewport } from "./Viewport.js";
-import { Inspector } from "three/examples/jsm/inspector/Inspector.js";
 
 export class WebGLApp {
   constructor({
@@ -87,8 +87,6 @@ export class WebGLApp {
     this.update({ timeMs, elapsed, delta });
     this.render();
   }
-
-  update({ timeMs, elapsed, delta }) {}
 
   render() {
     this.renderer.render(this.scene, this.camera);

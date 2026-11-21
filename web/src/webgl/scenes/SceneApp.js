@@ -1,32 +1,29 @@
-import * as THREE from "three/webgpu";
+import { Letter } from "@/utils/Letter.js";
+import { damp } from "@/utils/maths.js";
+import { AssetLoader } from "@/webgl/core/AssetLoader.js";
+import { AudioManager } from "@/webgl/core/AudioManager";
+import { WebGLApp } from "@/webgl/core/WebGLApp.js";
+import { Debug } from "@/webgl/debug/Debug.js";
+import { applyBaseShadow } from "@/webgl/materials/BaseShadow.js";
+import { SkyMaterial } from "@/webgl/materials/Sky";
+import { Cloud } from "@/webgl/objects/Cloud.js";
+import { Model } from "@/webgl/objects/Model.js";
+import { OceanFloor } from "@/webgl/objects/OceanFloor.js";
+import { createOutlinePipeline } from "@/webgl/postprocessing/OutlinePass.js";
+import gsap from "gsap";
+import { CSS2DRenderer } from "three/addons/renderers/CSS2DRenderer.js";
 import {
   color,
   fog,
   rangeFogFactor,
-  uniform,
-  mix,
-  normalWorld,
-  time,
-  sin,
-  positionLocal,
-  positionWorldDirection,
+  uniform
 } from "three/tsl";
-import gsap from "gsap";
-import { CSS2DRenderer } from "three/addons/renderers/CSS2DRenderer.js";
-import { WebGLApp } from "@/webgl/core/WebGLApp.js";
-import { AssetLoader } from "@/webgl/core/AssetLoader.js";
-import { OceanFloor } from "@/webgl/objects/OceanFloor.js";
-import { Model } from "@/webgl/objects/Model.js";
-import { applyBaseShadow } from "@/webgl/materials/BaseShadow.js";
-import { Letter } from "@/utils/Letter.js";
-import { Debug } from "@/webgl/debug/Debug.js";
-import { createOutlinePipeline } from "@/webgl/postprocessing/OutlinePass.js";
-import { SkyMaterial } from "@/webgl/materials/Sky";
-import { AudioManager } from "@/webgl/core/AudioManager";
-import { Cloud } from "@/webgl/objects/Cloud.js";
-import { damp } from "@/utils/maths.js";
+import * as THREE from "three/webgpu";
 
 const HORIZON = 0xa3cbe4;
+const REF_ASPECT = 16 / 9;
+const MIN_CAMERA_ZOOM = 0.55;
+const MAX_CAMERA_ZOOM = 1.25;
 const DEFAULT_CAMERA_POS = new THREE.Vector3(-85.5, 28, 19);
 const DEFAULT_CAMERA_TARGET = new THREE.Vector3(8, 12, 12);
 const ISLAND_POS = new THREE.Vector3(0, 1, 0);
@@ -37,17 +34,20 @@ const LOGIN_ISLAND_SCALE = 0.6;
 const LOGIN_ISLAND_ROTATION = new THREE.Vector3(0, 0, 0);
 const LOGIN_CAMERA_POS = new THREE.Vector3(0, 37.5, 0);
 const LOGIN_CAMERA_TARGET = new THREE.Vector3(150, 28, 20);
-const LETTER_CAMERA_POS = new THREE.Vector3(-0.5, 22.5, -1.8);
+const LETTER_CAMERA_POS = new THREE.Vector3(-5, 23, 6.2);
 const LETTER_CAMERA_ROTATION = new THREE.Vector3(-6, -8, 0);
-const LETTER_POS = new THREE.Vector3(0.5, 21.4, -11);
+const LETTER_POS = new THREE.Vector3(-3.6, 21.1, -4.2);
 const LETTER_SCALE = 0.084;
-const DARK_BACKGROUND_POS = new THREE.Vector3(1.36, 19.98, -11.95);
+const DARK_BACKGROUND_POS = new THREE.Vector3(-46.04, 19.98, -11.95);
 const DARK_BACKGROUND_OPACITY = 0.85;
-const BOTTLE_POS = new THREE.Vector3(-30, -3, 45);
 const BOTTLE_SCALE = 6;
 const BOTTLE_FLOATING_AMPLITUDE = 0.6;
 const BOTTLE_FLOATING_SPEED = 1.2;
-const BOTTLE_MIN_SPACING = 12;
+const BOTTLE_POSITIONS = {
+  desktop: [new THREE.Vector3(-20, -3, 52), new THREE.Vector3(10, -3, 54)],
+  tablet: [new THREE.Vector3(-51.5, -3, -1.5), new THREE.Vector3(-29, -3, 47)],
+  mobile: [new THREE.Vector3(-55, -3, 7.5), new THREE.Vector3(-53, -3, 23)],
+};
 const LETTER_STACK_GAP = 7.6;
 const CLOUDS_CONFIG = [
   { x: 180, y: 60, z: -180, scale: 50, speed: 3.5, textureIndex: 0 },
@@ -75,7 +75,6 @@ export class SceneApp extends WebGLApp {
     this.bottles = new Map();
     this.pendingBottles = [];
     this.isDestroyed = false;
-    this.spawnRaycaster = new THREE.Raycaster();
     this.hemiLight = null;
     this.sun = null;
     this.pipeline = null;
@@ -109,7 +108,6 @@ export class SceneApp extends WebGLApp {
       loginIslandPosition: LOGIN_ISLAND_POS.clone(),
       loginIslandScale: LOGIN_ISLAND_SCALE,
       loginIslandRotation: LOGIN_ISLAND_ROTATION.clone(),
-      bottlePosition: BOTTLE_POS.clone(),
       bottleScale: 1,
       bottleFloatingAmplitude: BOTTLE_FLOATING_AMPLITUDE,
       bottleFloatingSpeed: BOTTLE_FLOATING_SPEED,
@@ -374,7 +372,7 @@ export class SceneApp extends WebGLApp {
     this.camera.fov = 55;
     this.camera.near = 0.1;
     this.camera.far = 1000;
-    this.camera.updateProjectionMatrix();
+    this.updateCameraZoom();
     this.raycaster = new THREE.Raycaster();
     this.mouse = new THREE.Vector2(1, 1);
 
@@ -465,57 +463,11 @@ export class SceneApp extends WebGLApp {
     this.updateBottles();
   }
 
-  findBottleSpawnPosition() {
-    this.island?.group?.updateMatrixWorld(true);
-    const containers = this.island?.bottleContainers;
-    if (!containers?.length) {
-      return this.params.bottlePosition.clone();
-    }
-
-    const box = new THREE.Box3();
-    for (const container of containers) {
-      box.expandByObject(container);
-    }
-
-    const existingPositions = [...this.bottles.values()]
-      .map((entry) => entry.basePos)
-      .filter(Boolean);
-
-    const y = this.params.bottlePosition.y;
-    const origin = new THREE.Vector3();
-    const down = new THREE.Vector3(0, -1, 0);
-    let bestCandidate = null;
-    let bestMinDist = -1;
-
-    for (let attempt = 0; attempt < 150; attempt++) {
-      const x = box.min.x + Math.random() * (box.max.x - box.min.x);
-      const z = box.min.z + Math.random() * (box.max.z - box.min.z);
-
-      origin.set(x, box.max.y + 50, z);
-      this.spawnRaycaster.set(origin, down);
-      if (
-        this.spawnRaycaster.intersectObjects(containers, false).length === 0
-      ) {
-        continue;
-      }
-
-      const minDist = existingPositions.length
-        ? Math.min(
-            ...existingPositions.map((pos) => Math.hypot(x - pos.x, z - pos.z)),
-          )
-        : Infinity;
-
-      if (minDist >= BOTTLE_MIN_SPACING) {
-        return new THREE.Vector3(x, y, z);
-      }
-
-      if (minDist > bestMinDist) {
-        bestMinDist = minDist;
-        bestCandidate = new THREE.Vector3(x, y, z);
-      }
-    }
-
-    return bestCandidate ?? this.params.bottlePosition.clone();
+  getBottlePositions() {
+    const width = this.viewport?.width || window.innerWidth;
+    if (width <= 767) return BOTTLE_POSITIONS.mobile;
+    if (width <= 1024) return BOTTLE_POSITIONS.tablet;
+    return BOTTLE_POSITIONS.desktop;
   }
 
   async setBottles(bottlesData = []) {
@@ -536,16 +488,21 @@ export class SceneApp extends WebGLApp {
       this.bottles.delete(name);
     }
 
-    const toAdd = bottlesData.filter((b) => !this.bottles.has(b.name));
-    for (const bottleData of toAdd) {
+    const positions = this.getBottlePositions();
+    for (const [index, bottleData] of bottlesData.entries()) {
+      if (this.bottles.has(bottleData.name)) {
+        this.bottles.get(bottleData.name).index = index;
+        continue;
+      }
+
+      const pos = positions[index] ?? positions[0];
       const placeholder = {
+        index,
         data: bottleData,
         model: null,
-        basePos: this.findBottleSpawnPosition(),
-        phase: Math.random() * Math.PI * 2,
-        baseRotY: Math.random() * Math.PI * 2,
-        tiltX: (Math.random() - 0.5) * 0.25,
-        tiltZ: Math.PI / 8 + (Math.random() - 0.5) * 0.25,
+        basePos: pos.clone(),
+        phase: index * 2.6,
+        baseRotY: index === 0 ? 0.6 : 2.5,
       };
       this.bottles.set(bottleData.name, placeholder);
 
@@ -568,13 +525,12 @@ export class SceneApp extends WebGLApp {
       }
 
       model.bottleData = bottleData;
-      group.position.copy(placeholder.basePos);
-      group.rotation.x = placeholder.tiltX;
-      group.rotation.z = placeholder.tiltZ;
-      group.scale.setScalar(this.params.bottleScale);
+      group.rotation.x = index === 0 ? 0.08 : -0.07;
+      group.rotation.z = index === 0 ? 0.35 : 0.43;
       if (this.sun) applyBaseShadow(group, this.sun);
       this.scene.add(group);
       placeholder.model = model;
+      this.applyBottleTransform();
     }
 
     this.updateBottles();
@@ -641,6 +597,17 @@ export class SceneApp extends WebGLApp {
     this.camera.lookAt(target);
   }
 
+  updateCameraZoom() {
+    this.camera.zoom = this.isWriting
+      ? 1
+      : THREE.MathUtils.clamp(
+          this.viewport.aspectRatio / REF_ASPECT,
+          MIN_CAMERA_ZOOM,
+          MAX_CAMERA_ZOOM,
+        );
+    this.camera.updateProjectionMatrix();
+  }
+
   endDarkBackgroundPlaneTransition() {
     if (!this.darkBackgroundPlane) return;
     const material = this.darkBackgroundPlane.material;
@@ -659,6 +626,7 @@ export class SceneApp extends WebGLApp {
     gsap.killTweensOf(this);
     this.stackOffset = 0;
     this.isWriting = true;
+    this.updateCameraZoom();
     this.showBackLetter = stacked;
     this.letterWriting.inLetterMode = true;
     this.audioManager.setLetterMode(true);
@@ -722,8 +690,15 @@ export class SceneApp extends WebGLApp {
   }
 
   applyBottleTransform() {
+    const positions = this.getBottlePositions();
     for (const entry of this.bottles.values()) {
-      entry.model?.group?.scale.setScalar(this.params.bottleScale);
+      const pos = positions[entry.index] ?? positions[0];
+      entry.basePos.copy(pos);
+
+      const group = entry.model?.group;
+      if (!group) continue;
+      group.position.copy(entry.basePos);
+      group.scale.setScalar(this.params.bottleScale);
     }
   }
 
@@ -745,6 +720,7 @@ export class SceneApp extends WebGLApp {
     gsap.killTweensOf(this);
     this.stackOffset = 0;
     this.isWriting = false;
+    this.updateCameraZoom();
     this.showBackLetter = false;
     this.letterWriting.inLetterMode = false;
     this.audioManager.setLetterMode(false);
@@ -764,6 +740,8 @@ export class SceneApp extends WebGLApp {
 
   resize() {
     super.resize();
+    this.updateCameraZoom();
+    this.applyBottleTransform();
     this.labelRenderer?.setSize(this.viewport.width, this.viewport.height);
   }
 

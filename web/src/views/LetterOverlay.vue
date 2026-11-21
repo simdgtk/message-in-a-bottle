@@ -309,6 +309,14 @@ onBeforeUnmount(() => {
     justify-content: space-evenly;
     align-items: center;
     background: url("/images/toolbar/bar.webp") center / 100% 100% no-repeat;
+
+    @media (max-width: 768px) {
+      left: 50%;
+      top: clamp(125px, 19%, 190px);
+      flex-direction: column-reverse;
+      transform: translate(-50%, -50%) rotate(90deg) scale(0.7);
+      transform-origin: center;
+    }
   }
 
   .tool {
@@ -317,6 +325,10 @@ onBeforeUnmount(() => {
     width: 80px;
     height: 80px;
     cursor: pointer;
+
+    @media (max-width: 768px) {
+      transform: rotate(-90deg);
+    }
 
     .state {
       position: absolute;

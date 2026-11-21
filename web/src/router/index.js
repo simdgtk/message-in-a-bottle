@@ -40,7 +40,6 @@ router.beforeEach((to) => {
   const seen = hasSeenIntro();
 
   if (!seen && to.name !== "intro") return { name: "intro" };
-  if (seen && to.name === "intro") return { name: "island" };
 });
 
 export default router;

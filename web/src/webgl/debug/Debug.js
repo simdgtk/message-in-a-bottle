@@ -9,7 +9,6 @@ export class Debug {
   constructor({ scene }) {
     this.scene = scene;
     this.pane = new Pane({ title: "Debug" });
-    // Keep the pane above every overlay (letter zone, fades, toolbar…)
     this.pane.element.parentElement.style.zIndex = "10000";
     this.defaultPreset = null;
 
@@ -447,11 +446,7 @@ export class Debug {
 
     const folder = this.pane.addFolder({ title: "Bouteille", expanded: false });
     const onChange = () => this.scene.refreshView();
-    const point = { x: { step: 0.5 }, y: { step: 0.2 }, z: { step: 0.5 } };
 
-    folder
-      .addBinding(params, "bottlePosition", { label: "Position", ...point })
-      .on("change", onChange);
     folder
       .addBinding(params, "bottleScale", {
         label: "Échelle",

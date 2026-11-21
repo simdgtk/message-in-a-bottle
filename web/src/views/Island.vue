@@ -1,5 +1,14 @@
 <template>
   <div class="island-page">
+    <button
+      v-if="!isWriting && !readingBottle"
+      type="button"
+      class="credits-button"
+      @pointerdown.stop
+      @click="openIntro"
+    >
+      Crédits
+    </button>
     <LetterOverlay
       v-if="isWriting"
       :letter="app?.letterWriting"
@@ -19,6 +28,7 @@
 
 <script setup>
 import { ref, watch, onMounted, onBeforeUnmount } from "vue";
+import { router } from "@/router/index";
 import { inbox, startBottles, stopBottles } from "@/composables/useBottles";
 import { sceneApp as app } from "@/composables/useSceneApp";
 import { fadeThrough } from "@/composables/useFade";
@@ -118,4 +128,38 @@ function leaveLetterMode() {
     await app.value?.setTopLetterImage(null);
   });
 }
+
+function openIntro() {
+  app.value?.audioManager?.play("uiInteraction");
+  fadeThrough(() => router.push({ name: "intro" }));
+}
 </script>
+
+<style lang="scss" scoped>
+.credits-button {
+  position: fixed;
+  right: 30px;
+  bottom: 30px;
+  z-index: 5;
+  width: 140px;
+  aspect-ratio: 341 / 98;
+  border: none;
+  background: url("/images/login/login_button.webp") center / 100% 100% no-repeat;
+  color: #fdebc8;
+  font-family: var(--font-primary);
+  font-size: 18px;
+  cursor: pointer;
+  transition:
+    scale 0.15s ease,
+    filter 0.15s ease;
+
+  &:hover {
+    scale: 1.05;
+    filter: brightness(1.1);
+  }
+
+  &:active {
+    scale: 0.95;
+  }
+}
+</style>
