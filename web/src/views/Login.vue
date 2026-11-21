@@ -60,7 +60,7 @@
               rel="noopener noreferrer"
               >TheLazyHase</a
             >,
-            pour leurs conseils et accompagnements.
+            pour leurs conseils et accompagnements en dev.
           </p>
         </div>
         <button
